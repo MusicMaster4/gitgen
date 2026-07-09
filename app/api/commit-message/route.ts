@@ -19,31 +19,35 @@ const DEFAULT_MODELS: Record<Provider, string> = {
   openai: "gpt-5.4-mini",
 };
 
+/** Caps keep latency low — short Conventional Commits don't need a big window. */
+const MAX_DIFF_CHARS = 6000;
+const MAX_COMPLETION_TOKENS = 48;
+
 const PROMPTS: Record<string, string> = {
-  en: `You are a git commit message generator. You receive the diff of the changes and reply with ONE single commit message.
+  en: `Git commit message generator. Reply with ONE line only.
 
-Strict rules:
-- Conventional Commits format: "<type>: <description>" (types: feat, fix, refactor, style, docs, chore, test, perf, build, ci).
-- Write in English, imperative mood, lowercase description.
-- Max 60 characters total. Short and specific about what changed.
-- Reply with ONLY the message. No quotes, no backticks, no explanation, no trailing period, no extra line break.
+Rules:
+- Conventional Commits: "<type>: <description>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
+- English, imperative, lowercase description
+- MAX 40 characters total. Prefer 25–35. Ultra short.
+- ONLY the message. No quotes, no period, no extra text.
 
-Valid examples:
-feat: add automatic commit generation
-fix: correct branch field validation
-refactor: extract copy logic into a hook`,
-  pt: `Voce e um gerador de mensagens de commit git. Recebe o diff das mudancas e responde com UMA unica mensagem de commit.
+Examples:
+feat: add commit AI
+fix: branch validation
+chore: bump deps`,
+  pt: `Gerador de mensagem de commit git. Responda com UMA linha apenas.
 
-Regras rigidas:
-- Formato Conventional Commits: "<tipo>: <descricao>" (tipos: feat, fix, refactor, style, docs, chore, test, perf, build, ci).
-- Escreva em portugues, no imperativo, minusculas na descricao.
-- Maximo 60 caracteres no total. Curta e especifica sobre o que mudou.
-- Responda APENAS com a mensagem. Sem aspas, sem crases, sem explicacao, sem ponto final, sem quebra de linha extra.
+Regras:
+- Conventional Commits: "<tipo>: <descricao>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
+- Portugues, imperativo, minusculas na descricao
+- MAX 40 caracteres no total. Prefira 25–35. Ultra curta.
+- APENAS a mensagem. Sem aspas, sem ponto final, sem texto extra.
 
-Exemplos validos:
-feat: adiciona geracao automatica de commit
-fix: corrige validacao do campo de branch
-refactor: extrai logica de copia para hook`,
+Exemplos:
+feat: adiciona IA de commit
+fix: validacao do branch
+chore: atualiza deps`,
 };
 
 interface CommitRequestBody {
@@ -62,8 +66,9 @@ async function git(cwd: string, args: string[]): Promise<string> {
   try {
     const { stdout } = await pexec("git", args, {
       cwd,
-      maxBuffer: 20 * 1024 * 1024,
+      maxBuffer: 8 * 1024 * 1024,
       windowsHide: true,
+      timeout: 15_000,
     });
     return stdout;
   } catch {
@@ -86,15 +91,18 @@ function cleanMessage(raw: string): string {
   text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   text = text.replace(/<\/?think>/gi, "").trim();
 
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   if (lines.length === 0) return "";
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const candidate = stripEdges(lines[i]);
-    if (CC_RE.test(candidate)) return candidate;
+    if (CC_RE.test(candidate)) return candidate.slice(0, 72);
   }
 
-  return stripEdges(lines[lines.length - 1]);
+  return stripEdges(lines[lines.length - 1]).slice(0, 72);
 }
 
 function extractResponseText(data: unknown): string {
@@ -118,6 +126,30 @@ function extractResponseText(data: unknown): string {
   return typeof chatContent === "string" ? chatContent : "";
 }
 
+/** Compact context: status + name-status + truncated patch (faster than raw 14k diffs). */
+function buildContext(status: string, nameStatus: string, diff: string, untracked: string): string {
+  const parts: string[] = [];
+
+  const st = status.trim();
+  if (st) parts.push(`STATUS:\n${st}`);
+
+  const ns = nameStatus.trim();
+  if (ns) parts.push(`FILES:\n${ns}`);
+
+  const ut = untracked.trim();
+  if (ut) parts.push(`UNTRACKED:\n${ut}`);
+
+  let patch = diff.trim();
+  if (patch) {
+    if (patch.length > MAX_DIFF_CHARS) {
+      patch = `${patch.slice(0, MAX_DIFF_CHARS)}\n…(truncated)`;
+    }
+    parts.push(`DIFF:\n${patch}`);
+  }
+
+  return parts.join("\n\n");
+}
+
 function openRouterRequest(apiKey: string, model: string, language: string, context: string) {
   return fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -128,11 +160,11 @@ function openRouterRequest(apiKey: string, model: string, language: string, cont
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
-      max_tokens: 1200,
+      temperature: 0.1,
+      max_tokens: MAX_COMPLETION_TOKENS,
       messages: [
         { role: "system", content: PROMPTS[language] },
-        { role: "user", content: `Diff das mudancas:\n\n${context}` },
+        { role: "user", content: context },
       ],
     }),
   });
@@ -148,8 +180,9 @@ function openAiRequest(apiKey: string, model: string, language: string, context:
     body: JSON.stringify({
       model,
       instructions: PROMPTS[language],
-      input: `Diff das mudancas:\n\n${context}`,
-      max_output_tokens: 1200,
+      input: context,
+      max_output_tokens: MAX_COMPLETION_TOKENS,
+      temperature: 0.1,
     }),
   });
 }
@@ -158,7 +191,7 @@ async function readProviderError(res: Response, provider: Provider): Promise<str
   const text = await res.text().catch(() => "");
   let detail = `${PROVIDER_LABEL[provider]} respondeu ${res.status}`;
   try {
-    const j = JSON.parse(text);
+    const j = JSON.parse(text) as { error?: { message?: string } };
     if (j?.error?.message) detail = j.error.message;
   } catch {
     /* keep default detail */
@@ -192,7 +225,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Informe o caminho da pasta nas configuracoes" }, { status: 400 });
   }
   if (!apiKey) {
-    return NextResponse.json({ error: `Informe a API key da ${PROVIDER_LABEL[provider]} nas configuracoes` }, { status: 400 });
+    return NextResponse.json(
+      { error: `Informe a API key da ${PROVIDER_LABEL[provider]} nas configuracoes` },
+      { status: 400 }
+    );
   }
 
   const isRepo = (await git(path, ["rev-parse", "--is-inside-work-tree"])).trim();
@@ -203,22 +239,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let diff = await git(path, ["diff", "HEAD"]);
-  if (!diff.trim()) diff = await git(path, ["diff"]);
+  // Parallel git reads — biggest local latency win on Windows (multiple process spawns).
+  const [status, nameStatus, diffHead, untracked] = await Promise.all([
+    git(path, ["status", "--porcelain", "-u"]),
+    git(path, ["diff", "HEAD", "--name-status"]),
+    git(path, ["diff", "HEAD"]),
+    git(path, ["ls-files", "--others", "--exclude-standard"]),
+  ]);
 
-  const untracked = (await git(path, ["ls-files", "--others", "--exclude-standard"])).trim();
-
-  let context = diff;
-  if (untracked) {
-    context += `\n\nArquivos novos (nao rastreados):\n${untracked}`;
+  let diff = diffHead;
+  if (!diff.trim() && !untracked.trim()) {
+    // Unstaged-only edge case (rare when HEAD missing); one extra call only if needed.
+    diff = await git(path, ["diff"]);
   }
-  context = context.slice(0, 14000);
+
+  const context = buildContext(status, nameStatus, diff, untracked);
 
   if (!context.trim()) {
-    return NextResponse.json(
-      { error: "Nenhuma mudanca detectada no repositorio" },
-      { status: 422 }
-    );
+    return NextResponse.json({ error: "Nenhuma mudanca detectada no repositorio" }, { status: 422 });
   }
 
   try {

@@ -258,26 +258,49 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
   const outRestoreFile = `git restore ${file}\n`;
 
   /* ── AI commit generation + copy ── */
+  /** Avoid double API hits when clicking several cards with empty msg (same repo snapshot). */
+  const genCache = useRef<{ key: string; message: string; at: number } | null>(null);
+  const GEN_CACHE_MS = 12_000;
+  const inflightGen = useRef<Promise<string> | null>(null);
+
   const generateMessage = useCallback(async (): Promise<string> => {
-    const { folderPath, provider, openRouterApiKey, openRouterModel, openAiApiKey, openAiModel, language } = settingsRef.current;
-    const res = await fetch("/api/commit-message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: folderPath,
-        provider,
-        openRouterApiKey,
-        openRouterModel,
-        openAiApiKey,
-        openAiModel,
-        language,
-      }),
-    });
-    const data = (await res.json()) as { message?: string; error?: string };
-    if (!res.ok || !data.message) {
-      throw new Error(data.error || "Falha ao gerar mensagem");
+    const { folderPath, provider, openRouterApiKey, openRouterModel, openAiApiKey, openAiModel, language } =
+      settingsRef.current;
+    const key = `${folderPath}\0${provider}\0${language}\0${openRouterModel}\0${openAiModel}`;
+    const cached = genCache.current;
+    if (cached && cached.key === key && Date.now() - cached.at < GEN_CACHE_MS) {
+      return cached.message;
     }
-    return data.message;
+    if (inflightGen.current) return inflightGen.current;
+
+    const run = (async () => {
+      const res = await fetch("/api/commit-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: folderPath,
+          provider,
+          openRouterApiKey,
+          openRouterModel,
+          openAiApiKey,
+          openAiModel,
+          language,
+        }),
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (!res.ok || !data.message) {
+        throw new Error(data.error || "Falha ao gerar mensagem");
+      }
+      genCache.current = { key, message: data.message, at: Date.now() };
+      return data.message;
+    })();
+
+    inflightGen.current = run;
+    try {
+      return await run;
+    } finally {
+      if (inflightGen.current === run) inflightGen.current = null;
+    }
   }, []);
 
   /* copy de um card com auto-geração de commit (push / commitOnly / branch / merge) */
@@ -303,6 +326,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           return;
         }
       }
+      // Clipboard first so the user can paste ASAP; badge/state follow.
       await copyToClipboard(build(msg));
       flashCopied(id);
       if (generated) scheduleMsgClear(id, setMsg);
