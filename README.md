@@ -78,7 +78,7 @@ Each card shows live output as you type.
 - One-click copy on every card
 - Recent folders in `localStorage`
 - Folder picker modal on first launch
-- `gitgen` CLI opens the app with `?path=` from any repo
+- `gitgen start` / `gg start` opens the app with `?path=` from any repo
 - Collapsible sections, field validation, 30s message auto-clear
 
 </td>
@@ -101,7 +101,7 @@ Each card shows live output as you type.
 
 ```mermaid
 flowchart LR
-    A["Your repo"] -->|gitgen or modal| B["Git Command Generator"]
+    A["Your repo"] -->|gitgen start or modal| B["Git Command Generator"]
     B --> C{"Empty commit message?"}
     C -->|No| D["Build command block"]
     C -->|Yes + API key| E["commit-message API"]
@@ -189,7 +189,8 @@ On first launch (without `?path=`), a modal asks for your project folder: pick a
 From **any** project directory:
 
 ```bash
-gitgen
+gitgen start
+# or: gg start
 ```
 
 | Server state | Behavior |
@@ -197,37 +198,44 @@ gitgen
 | Already running on `localhost:2001` | Opens browser with `?path=` for current folder |
 | Offline | Starts `bun run dev` in background, waits, then opens browser |
 
+Bare `gitgen` / `gg` (no arguments) prints the command list — it does **not** open the app.
+
 ### CLI — run any workflow in the terminal
 
-Every card from the app also works as a `gitgen <command>` — **no browser, no server**. The commands
+Every card from the app also works as a CLI command — **no browser, no server**. The commands
 run git directly in your current folder and reuse the same AI message generator (`lib/commit-message.ts`).
-Bare `gitgen` (no arguments) still opens the app in the browser.
+
+**Launchers** (add `scripts/` to your `PATH` once): `gg`, `gitgen`, and `git-gen` are equivalent.
+
+**Short commands** (recommended) and long forms both work:
 
 ```bash
-gitgen commit              # add . -> AI commit message -> commit
-gitgen commit push         # ...and then push
-gitgen branch feature/x    # new branch -> add -> commit -> push -u origin feature/x
-gitgen merge feature/x     # commit -> checkout main -> merge feature/x -> push
-gitgen merge feature/x dev # ...merge feature/x into dev instead of main
-gitgen save                # commit current work, then checkout main
-gitgen switch main         # checkout main
-gitgen remote <url>        # git init -> remote add origin -> first push (main)
-gitgen restore             # discard ALL uncommitted changes (asks to confirm)
-gitgen restore src/x.ts    # discard one file
-gitgen help                # list every command
+gg start                   # open the web app with current folder
+gg c                       # commit only          (= gitgen commit)
+gg c p                     # commit + push        (= gitgen commit push)
+gg b feature/x             # create branch        (= gitgen branch feature/x)
+gg m feature/x             # merge into main      (= gitgen merge feature/x)
+gg m feature/x dev         # merge into dev
+gg s                       # save & return main   (= gitgen save)
+gg sw main                 # switch branch        (= gitgen switch main)
+gg r <url>                 # add remote + push    (= gitgen remote <url>)
+gg rs                      # restore all          (= gitgen restore)
+gg rs src/x.ts             # restore one file
+gg h                       # help                 (= gitgen help)
 ```
 
-| Command | App card | What it does |
-|---------|----------|--------------|
-| `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
-| `gitgen commit push` | 01 Commit + Push | …then `git push` |
-| `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
-| `gitgen merge <src> [dst]` | 04 Merge into Main | commit → `checkout <dst or main>` → `merge <src>` → push |
-| `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
-| `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
-| `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
-| `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
-| `gitgen help` | — | Show all commands |
+| Short | Long | App card | What it does |
+|-------|------|----------|--------------|
+| `gg start` | `gitgen start` | — | Open the web app with the current folder (`?path=`) |
+| `gg c` | `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
+| `gg c p` | `gitgen commit push` | 01 Commit + Push | …then `git push` |
+| `gg b <name>` | `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
+| `gg m <src> [dst]` | `gitgen merge <src> [dst]` | 04 Merge into Main | commit → `checkout <dst or main>` → `merge <src>` → push |
+| `gg s` | `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
+| `gg sw <branch>` | `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
+| `gg r <url>` | `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
+| `gg rs [file]` | `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
+| `gg h` | `gitgen help` | — | Show all commands |
 
 **Commit messages:** any command that commits takes an optional `-m "message"`. Omit it and, if an API
 key is set, the message is generated from your diff (same as the app); with no key it falls back to a
@@ -264,7 +272,7 @@ Equivalent to `scripts/open-here.ps1` / `open-here.mjs`. Add `scripts/` to your 
 
 ### Setup
 
-1. **Folder** — via `gitgen`, the startup modal, or **Settings → Change**
+1. **Folder** — via `gitgen start`, the startup modal, or **Settings → Change**
 2. **Provider & model** — OpenRouter or OpenAI
 3. **API key** — in `.env.local` and/or the UI
 4. **Language** — English or Portuguese for generated messages
@@ -323,8 +331,8 @@ lib/
   commit-message.ts             # shared git + AI generation (app + CLI)
 scripts/
   open-here.ps1 / .cmd / .mjs   # open app with current folder (dispatches CLI when args passed)
-  gitgen.cmd                    # PATH-friendly launcher (app + CLI commands)
-  cli.ts                        # gitgen CLI: commit/branch/merge/save/switch/remote/restore
+  gg.cmd / gitgen.cmd / git-gen.cmd  # PATH launchers (short + long; bare = help)
+  cli.ts                        # CLI: start, c|commit, b|branch, m|merge, s|save, sw|switch, r|remote, rs|restore
 start-dev.bat                   # start server + open browser
 .env.example                    # public template
 LICENSE                         # non-commercial

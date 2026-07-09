@@ -1,7 +1,7 @@
 # Abre o Git Command Generator com a pasta atual (cwd).
 # Se o server nao estiver rodando, sobe em uma janela nova de CMD e espera ficar pronto.
 #
-# Uso:  gitgen
+# Uso:  gitgen start
 #       .\open-here.ps1
 #       .\open-here.ps1 -Port 2001
 
@@ -16,14 +16,17 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-# Qualquer argumento vira subcomando CLI (commit, branch, merge, save, switch,
-# remote, restore, help). Sem argumentos, abre o app no navegador.
+# Qualquer argumento vira subcomando CLI (longos ou curtos: c/commit, b/branch,
+# m/merge, s/save, sw/switch, r/remote, rs/restore, h/help). Sem args = app.
 if ($Rest.Count -ge 1) {
   $bun = Get-Command bun -ErrorAction SilentlyContinue
   if (-not $bun) {
-    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar os comandos 'gitgen'."
+    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar os comandos 'gg' / 'gitgen'."
     exit 1
   }
+  # bun/node nao enxergam o console via PowerShell (isTTY=undefined). Se a saida
+  # nao esta redirecionada, avisamos o CLI que pode animar spinner + progress bar.
+  if (-not [Console]::IsOutputRedirected) { $env:GCG_TTY = "1" }
   & bun (Join-Path $PSScriptRoot "cli.ts") @Rest
   exit $LASTEXITCODE
 }

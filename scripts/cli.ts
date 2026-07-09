@@ -1,19 +1,25 @@
 #!/usr/bin/env bun
 /**
- * gitgen CLI — terminal equivalents of every workflow card in the web app.
+ * gitgen / gg CLI — terminal equivalents of every workflow card in the web app.
  * Runs the git commands directly in the current folder (no server needed) and
  * reuses the app's AI message generator (lib/commit-message.ts).
  *
- * Reads provider/keys from the app's .env.local. Run:  bun scripts/cli.ts <cmd> [args]
+ * Reads provider/keys from the app's .env.local.
+ * Run:  bun scripts/cli.ts <cmd> [args]   |   gitgen <cmd>   |   gg <cmd>
  *
- *   commit [push] [-m msg]   add . -> (AI) commit [-> push]
- *   branch <name> [-m msg]   checkout -b -> add -> commit -> push -u origin <name>
- *   merge  <src> [dst] [-m]  add -> commit -> checkout <dst|main> -> merge <src> -> push
- *   save   [-m msg]          add -> commit -> checkout main (save state, back to main)
- *   switch <branch>          checkout <branch>
- *   remote <url> [-m msg]    git init -> remote add origin -> add -> commit -> push -u origin main
- *   restore [file] [-y]      git restore . (or a single file) — destructive
- *   help                     show this list
+ * Long form              Short        What it does
+ * ─────────────────────  ───────────  ──────────────────────────────────────────
+ *   start                start        open the web app with current folder
+ *   commit [push]        c [p]        add . -> (AI) commit [-> push]
+ *   branch <name>        b <name>     checkout -b -> add -> commit -> push -u
+ *   merge  <src> [dst]   m <src> [d]  add -> commit -> checkout dst -> merge -> push
+ *   save                 s            add -> commit -> checkout main
+ *   switch <branch>      sw <branch>  checkout <branch>
+ *   remote <url>         r <url>      init -> remote add origin -> first push
+ *   restore [file]       rs [file]    git restore . (or one file) — destructive
+ *   help                 h            show this list (also the default with no args)
+ *
+ * Flags: -m / --message "msg" · -y / --yes (skip restore confirm)
  */
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -81,8 +87,11 @@ function die(msg: string): never {
 /* ── live progress indicator ── */
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const BAR_WIDTH = 22;
-const CLEAR_EOL = "\x1b[K"; // erase from cursor to end of line
-const isTTY = Boolean(process.stdout.isTTY);
+// When launched through PowerShell/cmd, node/bun often can't see the console and
+// report isTTY=undefined. The launcher sets GCG_TTY=1 when it knows it's interactive.
+// Because bun then hasn't enabled VT processing, we clear the line by padding with
+// spaces (plain \r) instead of ANSI escapes, which may not render on that console.
+const animate = Boolean(process.stdout.isTTY) || process.env.GCG_TTY === "1";
 const secs = (start: number) => `${((Date.now() - start) / 1000).toFixed(1)}s`;
 
 function bar(percent: number): string {
@@ -116,24 +125,46 @@ async function withProgress<T>(
   const start = Date.now();
   let detail = "";
   let frame = 0;
+  // Non-animated fallback: print progress milestones as discrete lines so piped
+  // output / dumb terminals still show advancement (every ~25% and on phase change).
+  let lastPhase = "";
+  let lastMilestone = -1;
   const setDetail = (s: string) => {
     detail = s.length > 70 ? s.slice(0, 67) + "…" : s;
+    if (animate) return;
+    const m = s.match(/(\d{1,3})%/);
+    if (!m) return;
+    const phase = s.split(":")[0].trim();
+    const pct = parseInt(m[1], 10);
+    if (phase !== lastPhase) {
+      lastPhase = phase;
+      lastMilestone = -1;
+    }
+    if (pct >= lastMilestone + 25 || pct === 100) {
+      lastMilestone = pct;
+      log(`    ${phase} ${bar(pct)}`);
+    }
+  };
+  // Overwrite the line with \r, padding with spaces to erase the previous (longer) frame.
+  let lastLen = 0;
+  const paint = (content: string, newline = false) => {
+    const pad = content.length < lastLen ? " ".repeat(lastLen - content.length) : "";
+    lastLen = content.length;
+    process.stdout.write(`\r${content}${pad}${newline ? "\n" : ""}`);
   };
   const draw = () => {
-    process.stdout.write(
-      `\r  ${SPINNER[(frame = (frame + 1) % SPINNER.length)]} ${label}${renderDetail(detail)}  ${secs(start)}${CLEAR_EOL}`
-    );
+    paint(`  ${SPINNER[(frame = (frame + 1) % SPINNER.length)]} ${label}${renderDetail(detail)}  ${secs(start)}`);
   };
   let timer: ReturnType<typeof setInterval> | undefined;
-  if (isTTY) {
-    process.stdout.write(`  · ${label}`);
+  if (animate) {
+    draw();
     timer = setInterval(draw, 80);
   } else {
     log(`  · ${label} ...`);
   }
   const finish = (mark: string) => {
     if (timer) clearInterval(timer);
-    if (isTTY) process.stdout.write(`\r  ${mark} ${label}  ${secs(start)}${CLEAR_EOL}\n`);
+    if (animate) paint(`  ${mark} ${label}  ${secs(start)}`, true);
     else log(`  ${mark} ${label} (${secs(start)})`);
   };
   try {
@@ -244,20 +275,86 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "-y" || a === "--yes") yes = true;
   else positional.push(a);
 }
-const cmd = (positional[0] || "").toLowerCase();
+
+/** Short → long command map. Both forms work: `gg c` / `gitgen commit`. */
+const SHORT_CMDS: Record<string, string> = {
+  c: "commit",
+  b: "branch",
+  m: "merge",
+  s: "save",
+  sw: "switch",
+  r: "remote",
+  rs: "restore",
+  h: "help",
+};
+
+const rawCmd = (positional[0] || "").toLowerCase();
+const cmd = SHORT_CMDS[rawCmd] || rawCmd;
 const arg1 = positional[1];
 const arg2 = positional[2];
 
-const HELP = `gitgen — terminal git workflows (folder: ${cwd})
+/** True when the token means "also push" after commit (`push` or short `p`). */
+function isPushToken(t: string | undefined): boolean {
+  const v = (t || "").toLowerCase();
+  return v === "push" || v === "p";
+}
 
-  gitgen commit [push] [-m "msg"]   add . -> commit [-> push]  (AI message if -m omitted)
-  gitgen branch <name> [-m "msg"]   new branch -> add -> commit -> push -u origin <name>
-  gitgen merge  <src> [dst] [-m]    commit -> checkout <dst|main> -> merge <src> -> push
-  gitgen save   [-m "msg"]          commit current work, then checkout main
-  gitgen switch <branch>            checkout <branch>
-  gitgen remote <url> [-m "msg"]    git init -> remote add origin -> first push (main)
-  gitgen restore [file] [-y]        discard changes (all, or one file) — destructive
-  gitgen help                       show this list
+/** Open the web app for the current folder (starts the dev server if needed). */
+async function openApp(): Promise<void> {
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const port = process.env.GCG_PORT || "2001";
+  log(`Git Command Generator — start (folder: ${cwd})`);
+  await new Promise<void>((resolve, reject) => {
+    const child =
+      process.platform === "win32"
+        ? spawn(
+            "powershell",
+            [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              join(scriptDir, "open-here.ps1"),
+              "-Port",
+              port,
+            ],
+            { stdio: "inherit", cwd, windowsHide: true }
+          )
+        : spawn("bun", [join(scriptDir, "open-here.mjs")], {
+            stdio: "inherit",
+            cwd,
+            env: { ...process.env, GCG_PORT: port },
+          });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else process.exit(code ?? 1);
+    });
+  });
+}
+
+const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
+
+  Long                    Short              Action
+  ──────────────────────  ─────────────────  ────────────────────────────────────
+  start                   start              open the web app with this folder
+  commit [push] [-m msg]  c [p] [-m msg]     add . -> commit [-> push]  (AI if no -m)
+  branch <name> [-m msg]  b <name> [-m msg]  new branch -> add -> commit -> push -u
+  merge  <src> [dst] [-m] m <src> [dst] [-m] commit -> checkout dst|main -> merge -> push
+  save   [-m msg]         s [-m msg]         commit current work, then checkout main
+  switch <branch>         sw <branch>        checkout <branch>
+  remote <url> [-m msg]   r <url> [-m msg]   git init -> remote add origin -> first push
+  restore [file] [-y]     rs [file] [-y]     discard changes (all, or one file)
+  help                    h                  show this list (default if no command)
+
+  Examples:
+    gg start             gitgen start
+    gg c                 gitgen commit
+    gg c p               gitgen commit push
+    gg b feature/login   gitgen branch feature/login
+    gg m feature/login   gitgen merge feature/login
+    gg s                 gitgen save
+    gg sw main           gitgen switch main
 
 AI: ${PROVIDER_LABEL[provider]} (${model})${apiKey ? "" : " — no API key set, defaults used"}`;
 
@@ -270,8 +367,13 @@ async function main() {
       log(HELP);
       return;
 
+    case "start": {
+      await openApp();
+      return;
+    }
+
     case "commit": {
-      const push = (arg1 || "").toLowerCase() === "push";
+      const push = isPushToken(arg1);
       log(`Git Command Generator — commit${push ? " + push" : ""}`);
       log(`  folder : ${cwd}`);
       if (!(await hasChanges())) {
@@ -289,7 +391,7 @@ async function main() {
 
     case "branch": {
       const name = arg1;
-      if (!name) die('branch name required — e.g. gitgen branch feature/login');
+      if (!name) die('branch name required — e.g. gg b feature/login  (or gitgen branch feature/login)');
       log(`Git Command Generator — create branch ${name}`);
       log(`  folder : ${cwd}`);
       const message = await resolveMessage(messageFlag, "feat: new branch");
@@ -304,7 +406,7 @@ async function main() {
 
     case "merge": {
       const source = arg1;
-      if (!source) die('branch name required — e.g. gitgen merge feature/login [target]');
+      if (!source) die('branch name required — e.g. gg m feature/login [target]');
       const target = arg2 || "main";
       log(`Git Command Generator — merge ${source} into ${target}`);
       log(`  folder : ${cwd}`);
@@ -339,7 +441,7 @@ async function main() {
 
     case "switch": {
       const target = arg1;
-      if (!target) die('branch name required — e.g. gitgen switch main');
+      if (!target) die('branch name required — e.g. gg sw main  (or gitgen switch main)');
       log(`Git Command Generator — switch to ${target}`);
       log(`  folder : ${cwd}`);
       await runSteps(async () => {
@@ -350,7 +452,7 @@ async function main() {
 
     case "remote": {
       const url = arg1;
-      if (!url) die('repository URL required — e.g. gitgen remote https://github.com/me/repo.git');
+      if (!url) die('repository URL required — e.g. gg r https://github.com/me/repo.git');
       log(`Git Command Generator — add remote origin`);
       log(`  folder : ${cwd}`);
       await runSteps(async () => {
@@ -385,7 +487,7 @@ async function main() {
     }
 
     default:
-      die(`unknown command "${cmd}". Run "gitgen help" for the list.`);
+      die(`unknown command "${rawCmd}". Run "gg h" or "gitgen help" for the list.`);
   }
 }
 
