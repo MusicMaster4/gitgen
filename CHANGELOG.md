@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1 — 2026-07-09
+
+- Automated release from main.
+
 All notable changes to Git Command Generator are documented here.
 Version numbers match `package.json` (semver). Bump with:
 

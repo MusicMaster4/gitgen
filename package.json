@@ -1,6 +1,6 @@
 {
   "name": "git-command-generator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Terminal git workflows with OpenRouter AI commit messages (gitgen / gg CLI)",
   "keywords": [
     "git",
