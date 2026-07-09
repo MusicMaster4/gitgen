@@ -85,7 +85,9 @@ Você pode deixar as chaves vazias no `.env.local` e preencher só na interface 
 bun run dev
 ```
 
-Abra [http://localhost:2001](http://localhost:2001).
+Abra [http://localhost:2001](http://localhost:2001) — ou use o `start-dev.bat` no Windows.
+
+Na primeira abertura (sem `?path=`), um **modal** pede a pasta do projeto: escolha uma **recente** ou **cole o caminho**.
 
 ### Scripts úteis
 
@@ -96,16 +98,46 @@ Abra [http://localhost:2001](http://localhost:2001).
 | `bun run start` | Serve o build (porta 2001) |
 | `bun run lint` | ESLint |
 | `bun run typecheck` | TypeScript sem emitir arquivos |
+| `bun run here` | Abre o app com a **pasta atual** (`?path=`) |
+
+## Abrir na pasta em que você está (terminal)
+
+No diretório do **seu** projeto:
+
+```bash
+gitgen
+```
+
+O que o `gitgen` faz:
+
+1. Se o server **já** estiver em `localhost:2001` → só abre o browser com `?path=` da pasta atual
+2. Se estiver **offline** → abre uma **nova janela CMD** com `bun run dev` no app, espera ficar pronto e abre o browser
+
+(Equivale a `scripts/open-here.ps1` / `open-here.mjs`. O `scripts/` precisa estar no PATH do usuário — veja instalação abaixo.)
+
+Instalar no PATH (Windows), uma vez:
+
+```powershell
+# já feito se você configurou antes; senão adicione esta pasta ao Path do usuário:
+# H:\Python\Slop\git-command-generator\scripts
+```
+
+Porta customizada: `GCG_PORT` (padrão `2001`). Timeout da subida: `GCG_TIMEOUT` em segundos no `.mjs` / `-TimeoutSec` no `.ps1`.
 
 ## Como usar a geração de commit
 
-1. Em **Config**, informe o **caminho absoluto** da pasta do projeto git (ex.: `H:\Python\meu-app`).
+1. Defina a pasta do projeto de um destes jeitos:
+   - **Terminal:** `gitgen` (recomendado)
+   - **Modal** ao abrir pelo `.bat` ou browser: pastas recentes ou colar o path
+   - **Config** → campo do caminho ou botão **Trocar**
 2. Escolha o provedor (OpenRouter / OpenAI) e o modelo.
 3. Garanta uma chave: no `.env.local` **ou** no campo da tela.
 4. Faça suas edições no repo de verdade.
 5. Em um card (push, commit, branch…), deixe a mensagem vazia e clique em copiar — a API gera a mensagem a partir do diff e monta o bloco de comandos.
 
 Sem chave / sem pasta válida, os cards ainda copiam comandos com mensagens padrão.
+
+As pastas usadas ficam em **recentes** (`localStorage`) para o próximo modal.
 
 ## Segurança (importante)
 
@@ -134,10 +166,13 @@ A API usa a chave no **servidor** (Authorization Bearer nas chamadas OpenRouter/
 ```text
 app/
   api/commit-message/route.ts   # git + chamada à IA
-  HomeClient.tsx                # UI principal
+  HomeClient.tsx                # UI principal (+ modal de pasta / recentes)
   page.tsx                      # SSR: defaults do env (sem expor chaves)
   layout.tsx
   globals.css
+scripts/
+  open-here.ps1 / .cmd / .mjs   # abre o app com a pasta atual (?path=)
+start-dev.bat                   # sobe o server e abre o browser (com modal)
 .env.example                    # template público
 LICENSE                         # uso livre, sem uso comercial
 ```

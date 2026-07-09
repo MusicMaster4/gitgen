@@ -88,6 +88,69 @@ interface Settings {
   language: Language;
 }
 const SETTINGS_KEY = "gcg.settings";
+const RECENTS_KEY = "gcg.recentPaths";
+const FOLDER_GATE_KEY = "gcg.folderGate";
+const MAX_RECENTS = 8;
+
+function normalizeFolderPath(p: string): string {
+  return (p || "").trim().replace(/^["']+|["']+$/g, "");
+}
+
+function folderBasename(full: string): string {
+  const cleaned = full.replace(/[\\/]+$/, "");
+  const parts = cleaned.split(/[\\/]/);
+  return parts[parts.length - 1] || full;
+}
+
+function readRecents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x): x is string => typeof x === "string" && normalizeFolderPath(x) !== "")
+      .map(normalizeFolderPath)
+      .filter((p, i, arr) => arr.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i)
+      .slice(0, MAX_RECENTS);
+  } catch {
+    return [];
+  }
+}
+
+function writeRecents(paths: string[]): string[] {
+  const cleaned = paths
+    .map(normalizeFolderPath)
+    .filter(Boolean)
+    .filter((p, i, arr) => arr.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i)
+    .slice(0, MAX_RECENTS);
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(cleaned));
+  } catch {
+    /* ignore */
+  }
+  return cleaned;
+}
+
+function rememberPath(path: string, existing?: string[]): string[] {
+  const n = normalizeFolderPath(path);
+  if (!n) return existing ?? readRecents();
+  const base = existing ?? readRecents();
+  return writeRecents([n, ...base.filter((p) => p.toLowerCase() !== n.toLowerCase())]);
+}
+
+function stripPathQueryParam(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("path")) return;
+    url.searchParams.delete("path");
+    const qs = url.searchParams.toString();
+    const next = qs ? `${url.pathname}?${qs}${url.hash}` : `${url.pathname}${url.hash}`;
+    window.history.replaceState({}, "", next);
+  } catch {
+    /* ignore */
+  }
+}
 
 export interface EnvDefaults {
   provider: Provider;
@@ -109,33 +172,98 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
     openAiModel: env.openAiModel || DEFAULT_OPENAI_MODEL,
     language: env.language,
   });
+  const [recents, setRecents] = useState<string[]>([]);
+  const [folderReady, setFolderReady] = useState(false);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [modalDraft, setModalDraft] = useState("");
+  const [modalError, setModalError] = useState(false);
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
 
   useEffect(() => {
+    // Hidratação client-only do localStorage/URL: setState no mount é intencional
+    // (inicializador lazy causaria mismatch de hidratação com o SSR).
+    /* eslint-disable react-hooks/set-state-in-effect */
+    let nextSettings: Settings = {
+      folderPath: "",
+      provider: env.provider,
+      openRouterApiKey: "",
+      openRouterModel: env.openRouterModel || DEFAULT_OPENROUTER_MODEL,
+      openAiApiKey: "",
+      openAiModel: env.openAiModel || DEFAULT_OPENAI_MODEL,
+      language: env.language,
+    };
+
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Settings> & { apiKey?: string; model?: string };
-        const provider: Provider = parsed.provider === "openai" ? "openai" : parsed.provider === "openrouter" ? "openrouter" : env.provider;
-        // Hidratação client-only do localStorage: setState no mount é intencional
-        // (inicializador lazy causaria mismatch de hidratação com o SSR).
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSettings({
-          folderPath: parsed.folderPath || "",
+        const provider: Provider =
+          parsed.provider === "openai" ? "openai" : parsed.provider === "openrouter" ? "openrouter" : env.provider;
+        nextSettings = {
+          folderPath: normalizeFolderPath(parsed.folderPath || ""),
           provider,
           openRouterApiKey: parsed.openRouterApiKey || parsed.apiKey || "",
           openRouterModel: parsed.openRouterModel || parsed.model || env.openRouterModel || DEFAULT_OPENROUTER_MODEL,
           openAiApiKey: parsed.openAiApiKey || "",
           openAiModel: parsed.openAiModel || env.openAiModel || DEFAULT_OPENAI_MODEL,
           language: parsed.language === "pt" || parsed.language === "en" ? parsed.language : env.language,
-        });
+        };
       }
     } catch {
       /* ignore */
     }
+
+    let list = readRecents();
+    if (nextSettings.folderPath) {
+      list = rememberPath(nextSettings.folderPath, list);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = normalizeFolderPath(params.get("path") || "");
+
+    if (fromUrl) {
+      nextSettings = { ...nextSettings, folderPath: fromUrl };
+      list = rememberPath(fromUrl, list);
+      try {
+        sessionStorage.setItem(FOLDER_GATE_KEY, "path");
+      } catch {
+        /* ignore */
+      }
+      stripPathQueryParam();
+      setSettings(nextSettings);
+      setRecents(list);
+      setFolderReady(true);
+      setShowFolderModal(false);
+      try {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(nextSettings));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+
+    let gate: string | null = null;
+    try {
+      gate = sessionStorage.getItem(FOLDER_GATE_KEY);
+    } catch {
+      /* ignore */
+    }
+
+    setSettings(nextSettings);
+    setRecents(list);
+
+    if (gate === "path" || gate === "skip") {
+      setFolderReady(true);
+      setShowFolderModal(false);
+    } else {
+      setFolderReady(false);
+      setShowFolderModal(true);
+      setModalDraft(nextSettings.folderPath || "");
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -150,6 +278,46 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
       return next;
     });
   };
+
+  const applyFolderPath = useCallback((path: string) => {
+    const n = normalizeFolderPath(path);
+    if (!n) return false;
+    updateSettings({ folderPath: n });
+    setRecents(rememberPath(n));
+    try {
+      sessionStorage.setItem(FOLDER_GATE_KEY, "path");
+    } catch {
+      /* ignore */
+    }
+    setFolderReady(true);
+    setShowFolderModal(false);
+    setModalError(false);
+    setModalDraft(n);
+    return true;
+  }, []);
+
+  const skipFolder = useCallback(() => {
+    updateSettings({ folderPath: "" });
+    try {
+      sessionStorage.setItem(FOLDER_GATE_KEY, "skip");
+    } catch {
+      /* ignore */
+    }
+    setFolderReady(true);
+    setShowFolderModal(false);
+    setModalError(false);
+    setModalDraft("");
+  }, []);
+
+  const openFolderModal = useCallback(() => {
+    setModalDraft(settingsRef.current.folderPath || "");
+    setModalError(false);
+    setShowFolderModal(true);
+  }, []);
+
+  const removeRecent = useCallback((path: string) => {
+    setRecents((prev) => writeRecents(prev.filter((p) => p.toLowerCase() !== path.toLowerCase())));
+  }, []);
 
   const hasKey =
     settings.provider === "openai"
@@ -398,18 +566,42 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
             </div>
             <div className="card-body" style={{ gridTemplateColumns: "1fr" }}>
               <div>
-                <div className="config-grid">
+                <div className="config-grid config-grid-folder">
                   <div>
                     <label htmlFor="folderPath">Caminho da pasta do projeto</label>
-                    <input
-                      id="folderPath"
-                      type="text"
-                      placeholder="ex.: H:\\Meus Projetos\\app"
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={settings.folderPath}
-                      onChange={(e) => updateSettings({ folderPath: e.target.value })}
-                    />
+                    <div className="folder-path-row">
+                      <input
+                        id="folderPath"
+                        type="text"
+                        placeholder="ex.: H:\\Meus Projetos\\app"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={settings.folderPath}
+                        onChange={(e) => updateSettings({ folderPath: e.target.value })}
+                        onBlur={() => {
+                          const n = normalizeFolderPath(settings.folderPath);
+                          if (n) setRecents(rememberPath(n));
+                        }}
+                      />
+                      <button type="button" className="btn-folder-pick" onClick={openFolderModal}>
+                        Trocar
+                      </button>
+                    </div>
+                    {recents.length > 0 && (
+                      <div className="recent-inline" aria-label="Pastas recentes">
+                        {recents.slice(0, 4).map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            className={`recent-chip${settings.folderPath.toLowerCase() === p.toLowerCase() ? " active" : ""}`}
+                            title={p}
+                            onClick={() => applyFolderPath(p)}
+                          >
+                            {folderBasename(p)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="language">Idioma do commit</label>
@@ -430,10 +622,12 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       Geração <b>ativa</b> — ao copiar um commit com a mensagem vazia, ela é gerada a partir do{" "}
                       <code>git diff</code> da pasta.
                     </>
+                  ) : settings.folderPath.trim() ? (
+                    <span className="off">Pasta definida — falta chave da API para gerar mensagens com IA.</span>
                   ) : (
                     <span className="off">
-                      Preencha o caminho da pasta para gerar mensagens automaticamente. Sem isso, o app funciona normal
-                      com as mensagens que você digitar.
+                      Sem pasta: o app ainda copia comandos com mensagens manuais. Para IA, escolha uma pasta (modal) ou
+                      abra com <code>gitgen</code> no terminal do projeto.
                     </span>
                   )}
                 </p>
@@ -917,6 +1111,98 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           </div>
         </div>
       </div>
+
+      {/* ── Modal: escolher pasta do projeto ── */}
+      {showFolderModal && (
+        <div
+          className="folder-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="folder-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && folderReady) setShowFolderModal(false);
+          }}
+        >
+          <div className="folder-modal">
+            <div className="folder-modal-tag">{"// projeto local"}</div>
+            <h2 id="folder-modal-title">
+              Qual pasta <span>você está</span>
+              <br />
+              trabalhando?
+            </h2>
+            <p className="folder-modal-sub">
+              Abriu pelo <code>.bat</code> ou direto no browser — escolha uma recente ou cole o caminho. Pelo terminal
+              com <code>gitgen</code>, a pasta já vem preenchida.
+            </p>
+
+            {recents.length > 0 && (
+              <div className="folder-modal-section">
+                <span className="folder-modal-label">Pastas recentes</span>
+                <ul className="folder-recent-list">
+                  {recents.map((p) => (
+                    <li key={p}>
+                      <button type="button" className="folder-recent-item" onClick={() => applyFolderPath(p)} title={p}>
+                        <span className="folder-recent-name">{folderBasename(p)}</span>
+                        <span className="folder-recent-path">{p}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="folder-recent-remove"
+                        aria-label={`Remover ${folderBasename(p)} dos recentes`}
+                        onClick={() => removeRecent(p)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="folder-modal-section">
+              <label className="folder-modal-label" htmlFor="modalFolderPath">
+                {recents.length > 0 ? "Ou cole um caminho novo" : "Cole o caminho da pasta do projeto"}
+              </label>
+              <input
+                id="modalFolderPath"
+                type="text"
+                className={modalError ? "input-error" : ""}
+                placeholder="ex.: H:\Python\meu-app"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+                value={modalDraft}
+                onChange={(e) => {
+                  setModalDraft(e.target.value);
+                  setModalError(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (!applyFolderPath(modalDraft)) setModalError(true);
+                  }
+                }}
+              />
+              {modalError && <span className="field-error-msg visible">⚠ Cole um caminho válido da pasta</span>}
+            </div>
+
+            <div className="folder-modal-actions">
+              <button
+                type="button"
+                className="btn-copy"
+                onClick={() => {
+                  if (!applyFolderPath(modalDraft)) setModalError(true);
+                }}
+              >
+                Usar esta pasta
+              </button>
+              <button type="button" className="btn-copy secondary" onClick={skipFolder}>
+                Continuar sem pasta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
