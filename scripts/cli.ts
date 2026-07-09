@@ -35,7 +35,7 @@ import { existsSync } from "node:fs";
 import { createConnection } from "node:net";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import {
@@ -64,9 +64,31 @@ import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 import { c, header, row, sym, visibleLength } from "../lib/ui";
 
 const pexec = promisify(execFile);
-const here = dirname(fileURLToPath(import.meta.url));
-// Source: scripts/ → repo root; bundled: dist/ → package root
-const packageRoot = join(here, "..");
+
+/**
+ * Package root for this CLI.
+ * Prefer process.argv[1] (the path npm put on PATH) over import.meta.url:
+ * `npm install -g .` creates a junction/symlink, and import.meta.url realpath
+ * would show the clone (H:\…) instead of the npm install dir.
+ */
+function resolvePackageRoot(): string {
+  const entry = process.argv[1] ? normalize(process.argv[1]) : "";
+  if (entry) {
+    const entryDir = dirname(entry);
+    // Published / built layout: <package>/dist/cli.js
+    if (entryDir.endsWith(`${sep}dist`) || /[\\/]dist$/i.test(entryDir)) {
+      return join(entryDir, "..");
+    }
+    // Dev: tsx scripts/cli.ts → package root is parent of scripts/
+    if (entryDir.endsWith(`${sep}scripts`) || /[\\/]scripts$/i.test(entryDir)) {
+      return join(entryDir, "..");
+    }
+  }
+  // Fallback (bundled): dist/ → package root
+  return join(dirname(fileURLToPath(import.meta.url)), "..");
+}
+
+const packageRoot = resolvePackageRoot();
 const cwd = process.cwd();
 
 const PROVIDER = "openrouter" as const;
