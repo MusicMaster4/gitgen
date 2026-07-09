@@ -16,15 +16,15 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-# Subcomando CLI: "gitgen commit" / "gitgen commit push" — nao abre o browser,
-# roda o script bun que gera a mensagem, commita e (opcional) da push.
-if ($Rest.Count -ge 1 -and $Rest[0].ToLower() -eq "commit") {
+# Qualquer argumento vira subcomando CLI (commit, branch, merge, save, switch,
+# remote, restore, help). Sem argumentos, abre o app no navegador.
+if ($Rest.Count -ge 1) {
   $bun = Get-Command bun -ErrorAction SilentlyContinue
   if (-not $bun) {
-    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar 'gitgen commit'."
+    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar os comandos 'gitgen'."
     exit 1
   }
-  & bun (Join-Path $PSScriptRoot "commit.ts") @Rest
+  & bun (Join-Path $PSScriptRoot "cli.ts") @Rest
   exit $LASTEXITCODE
 }
 $cwd = (Get-Location).Path

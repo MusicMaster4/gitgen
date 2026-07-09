@@ -197,21 +197,48 @@ gitgen
 | Already running on `localhost:2001` | Opens browser with `?path=` for current folder |
 | Offline | Starts `bun run dev` in background, waits, then opens browser |
 
-### Commit from the terminal
+### CLI — run any workflow in the terminal
 
-No browser, no server needed — the CLI reuses the same AI logic and reads keys from `.env.local`:
+Every card from the app also works as a `gitgen <command>` — **no browser, no server**. The commands
+run git directly in your current folder and reuse the same AI message generator (`lib/commit-message.ts`).
+Bare `gitgen` (no arguments) still opens the app in the browser.
 
 ```bash
-gitgen commit        # git add -A -> AI commit message -> git commit
-gitgen commit push   # ...and then git push
+gitgen commit              # add . -> AI commit message -> commit
+gitgen commit push         # ...and then push
+gitgen branch feature/x    # new branch -> add -> commit -> push -u origin feature/x
+gitgen merge feature/x     # commit -> checkout main -> merge feature/x -> push
+gitgen save                # commit current work, then checkout main
+gitgen switch main         # checkout main
+gitgen remote <url>        # git init -> remote add origin -> first push (main)
+gitgen restore             # discard ALL uncommitted changes (asks to confirm)
+gitgen restore src/x.ts    # discard one file
+gitgen help                # list every command
 ```
 
-| Command | What it does |
-|---------|--------------|
-| `gitgen commit` | Stages **everything**, generates a Conventional Commit from your diff, and commits |
-| `gitgen commit push` | Same as above, then `git push` |
+| Command | App card | What it does |
+|---------|----------|--------------|
+| `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
+| `gitgen commit push` | 01 Commit + Push | …then `git push` |
+| `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
+| `gitgen merge <branch>` | 04 Merge into Main | commit → `checkout main` → `merge <branch>` → push |
+| `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
+| `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
+| `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
+| `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
+| `gitgen help` | — | Show all commands |
 
-Runs entirely locally via `scripts/commit.ts` (Bun). Uses `AI_PROVIDER`, the matching `*_API_KEY` / `*_MODEL`, and `COMMIT_LANGUAGE` from `.env.local`.
+**Commit messages:** any command that commits takes an optional `-m "message"`. Omit it and, if an API
+key is set, the message is generated from your diff (same as the app); with no key it falls back to a
+sensible default (`feat: update`, `wip: saving progress`, …).
+
+**Live progress:** each step shows a spinner with elapsed time and a `✓`/`✗` on completion; pushes stream
+git's own transfer progress (`Writing objects: 60%…`) so you can see how far along it is instead of waiting blind.
+
+**Flags:** `-m "msg"` sets the commit message · `-y` / `--yes` skips the `restore` confirmation.
+
+Runs entirely locally via `scripts/cli.ts` (Bun). Uses `AI_PROVIDER`, the matching `*_API_KEY` / `*_MODEL`,
+and `COMMIT_LANGUAGE` from `.env.local`.
 
 Equivalent to `scripts/open-here.ps1` / `open-here.mjs`. Add `scripts/` to your user `PATH` once:
 
@@ -289,9 +316,9 @@ app/
 lib/
   commit-message.ts             # shared git + AI generation (app + CLI)
 scripts/
-  open-here.ps1 / .cmd / .mjs   # open app with current folder
-  gitgen.cmd                    # PATH-friendly launcher (also `commit` / `commit push`)
-  commit.ts                     # `gitgen commit [push]` CLI
+  open-here.ps1 / .cmd / .mjs   # open app with current folder (dispatches CLI when args passed)
+  gitgen.cmd                    # PATH-friendly launcher (app + CLI commands)
+  cli.ts                        # gitgen CLI: commit/branch/merge/save/switch/remote/restore
 start-dev.bat                   # start server + open browser
 .env.example                    # public template
 LICENSE                         # non-commercial

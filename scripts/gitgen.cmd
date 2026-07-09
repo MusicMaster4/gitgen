@@ -1,14 +1,14 @@
 @echo off
-REM gitgen — abre o Git Command Generator com a pasta atual (cwd)
-REM   gitgen              -> abre no navegador (sobe o server se preciso)
-REM   gitgen commit       -> add tudo, gera mensagem por IA e commita
-REM   gitgen commit push  -> add tudo, gera mensagem, commita e da push
+REM gitgen — Git Command Generator
+REM   gitgen                    -> abre o app no navegador (sobe o server se preciso)
+REM   gitgen <comando> [args]   -> roda o workflow no terminal (commit, branch, merge,
+REM                                save, switch, remote, restore, help)
 setlocal
 set "PORT=%GCG_PORT%"
 if "%PORT%"=="" set "PORT=2001"
 
-if /i "%~1"=="commit" (
-  bun "%~dp0commit.ts" %*
+if not "%~1"=="" (
+  bun "%~dp0cli.ts" %*
   exit /b %errorlevel%
 )
 
