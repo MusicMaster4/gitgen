@@ -1,162 +1,198 @@
 <div align="center">
 
-# Git Command Generator
+# gitgen
 
-**Type it, copy it, done.**
+### Git workflows in your terminal — AI commits included
 
-A local Next.js tool that builds ready-to-paste Git workflows — and generates Conventional Commit messages with AI from your real `git diff`.
+**Type less. Commit better. Ship faster.**
+
+`gg cnp` · add · AI Conventional Commit · push
+
+<br />
+
+[![npm](https://img.shields.io/npm/v/git-command-generator?style=flat-square&color=CB3837&label=npm)](https://www.npmjs.com/package/git-command-generator)
+[![node](https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![license](https://img.shields.io/badge/license-non--commercial-blue?style=flat-square)](./LICENSE)
+
+```bash
+npm install -g git-command-generator
+gg setup          # one-time OpenRouter setup
+gg cnp            # commit + push with AI message
+```
 
 <p>
-  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=nextdotjs" alt="Next.js" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Tailwind-4-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind" />
-  <img src="https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node" />
-  <img src="https://img.shields.io/badge/npm-installable-CB3837?style=for-the-badge&logo=npm&logoColor=white" alt="npm" />
-</p>
-
-<p>
-  <a href="#quick-start"><strong>Quick Start</strong></a> ·
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#ai-commit-generation"><strong>AI Commits</strong></a> ·
-  <a href="#cli"><strong>CLI (`gg`)</strong></a> ·
-  <a href="#security"><strong>Security</strong></a>
+  <a href="#install"><strong>Install</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#commands"><strong>Commands</strong></a> ·
+  <a href="#flags"><strong>Flags</strong></a> ·
+  <a href="#configuration"><strong>Config</strong></a> ·
+  <a href="#examples"><strong>Examples</strong></a>
 </p>
 
 </div>
 
 ---
 
-## Why this exists
+## What it does
 
-Git is powerful. Remembering every flag and sequence is not.
+**gitgen** (`gg`) is a terminal CLI that runs everyday Git workflows as short commands — and can write your commit message from the real `git diff` via OpenRouter.
 
-**Git Command Generator** gives you multi-step command blocks for everyday workflows — commit, push, branch, merge, stash, restore — in one click. Leave the commit message empty and AI reads your local diff to write a short Conventional Commit for you.
+No browser required. No accounts beyond an optional OpenRouter key. Works in any repo folder on Windows, macOS, and Linux.
 
-No accounts. No cloud repo access. Just your machine, your folder, your terminal.
+| You type | What runs |
+|----------|-----------|
+| `gg cnp` | `git add .` → AI commit → `git push` |
+| `gg b feature/login` | new branch → add → commit → `push -u` |
+| `gg m feature/login` | commit work → merge into `main` → push |
+| `gg s` | commit work → checkout `main` |
 
----
-
-## Features
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-### Ready-made workflows
-
-Copy full command sequences for:
-
-- First push & remote setup
-- Commit + push
-- Commit only (no push)
-- Create branch
-- Merge into `main`
-- Save state & switch back
-- Checkout any branch
-- Restore all files or one file
-
-Each card shows live output as you type.
-
-</td>
-<td width="50%" valign="top">
-
-### AI commit messages
-
-- Reads `git status`, name-status, and diff from **your** project folder
-- OpenRouter **or** OpenAI (server key or UI)
-- Conventional Commits format (`feat:`, `fix:`, `chore:`, …)
-- English or Portuguese output
-- 12s in-memory cache — no duplicate API hits when clicking multiple cards
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-### Developer ergonomics
-
-- One-click copy on every card
-- Recent folders in `localStorage`
-- Folder picker modal on first launch
-- Terminal CLI: `gg` / `gitgen` — short commands (`gg c p`, `gg b …`) or long forms
-- `gg start` opens the app with `?path=` from any repo
-- Collapsible sections, field validation, 30s message auto-clear
-
-</td>
-<td width="50%" valign="top">
-
-### Local-first
-
-- Runs on `localhost:2001`
-- API route executes `git` on your filesystem
-- Preferences stored in the browser
-- Keys stay in `.env.local` or localStorage — never in git
-
-</td>
-</tr>
-</table>
+Messages follow [Conventional Commits](https://www.conventionalcommits.org) (`feat:`, `fix:`, `chore:`, …). Pass `-m` anytime to skip AI.
 
 ---
 
-## How it works
+## Install
 
-```mermaid
-flowchart LR
-    A["Your repo"] -->|gitgen start or modal| B["Git Command Generator"]
-    B --> C{"Empty commit message?"}
-    C -->|No| D["Build command block"]
-    C -->|Yes + API key| E["commit-message API"]
-    E -->|git status + diff| F["Local git"]
-    E -->|context| G["OpenRouter or OpenAI"]
-    G -->|Conventional Commit| D
-    D --> H["Clipboard"]
-```
-
-1. Point the app at your project folder.
-2. Make changes in your real repo.
-3. Click **Copy** on a workflow card.
-4. Paste into your terminal. Done.
-
----
-
-## Quick start
-
-### Install the CLI (recommended)
-
-Requires [Node.js 18+](https://nodejs.org) and Git on your `PATH`.
+**Requirements:** [Node.js 18+](https://nodejs.org) and [Git](https://git-scm.com) on your `PATH`.
 
 ```bash
 npm install -g git-command-generator
 ```
 
-This installs the **published** package and puts **`gitgen`**, **`git-gen`**, and **`gg`** on your PATH via npm’s global bin directory — **not** the local `scripts/` folder in a clone.
+This puts three commands on your PATH (same binary):
 
-| OS | npm global bins (commands) | package install dir |
-|----|----------------------------|---------------------|
-| Windows | `%APPDATA%\npm\` (`gitgen.cmd`, `gg.cmd`, …) | `%APPDATA%\npm\node_modules\git-command-generator\` |
-| macOS / Linux | `$(npm prefix -g)/bin/` | `$(npm root -g)/git-command-generator/` |
+| Command | Notes |
+|---------|--------|
+| **`gg`** | Short name — recommended |
+| **`gitgen`** | Full name |
+| **`git-gen`** | Alias |
 
-Confirm anytime:
-
-```bash
-gitgen version             # version + install path + config path
-where gitgen               # Windows — which executable wins on PATH
-which gitgen               # macOS / Linux
-```
-
-**Do not** put the repo’s `scripts/` on PATH or wrap `open-here.ps1` as `gitgen` in your shell profile — that shadows the npm CLI and makes bare `gitgen` open the web server. Use **`gitgen start`** when you want the UI.
-
-First AI use runs an OpenRouter setup wizard (API key + model). You can also run:
+Verify:
 
 ```bash
-gitgen setup
-gitgen config              # show key (masked), model, language
-gitgen config set model google/gemini-2.0-flash-001
-gitgen update              # check npm / install latest
+gg version
+# or: gitgen version · gg v · gitgen --version
 ```
 
-User config is stored outside the repo:
+You should see the version, install path, and config path.
+
+### Update
+
+```bash
+gg update
+# or: npm update -g git-command-generator
+```
+
+### Uninstall
+
+```bash
+npm uninstall -g git-command-generator
+```
+
+---
+
+## Quick start
+
+```bash
+# 1. Install
+npm install -g git-command-generator
+
+# 2. One-time AI setup (API key is hidden as you type)
+gg setup
+
+# 3. In any git repo
+cd your-project
+gg cnp                 # stage everything, AI commit message, push
+```
+
+Without an API key, commits still work — they use sensible defaults (`feat: update`, `wip: saving progress`, …). Run `gg setup` when you want AI-written messages.
+
+Bare `gg` / `gitgen` prints **help**. It does not open a browser.
+
+---
+
+## Commands
+
+All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
+
+### Workflows
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `gg c` | `gg commit` | Stage all → commit (no push) |
+| `gg c p` | `gg commit push` | Stage all → commit → push |
+| `gg cnp` | `gg commit-and-push` | Same as commit + push (one token) |
+| `gg b <name>` | `gg branch <name>` | Create branch → add → commit → `push -u origin <name>` |
+| `gg m <src> [dst]` | `gg merge <src> [dst]` | Commit → checkout `dst` (default `main`) → merge `src` → push |
+| `gg s` | `gg save` | Commit current work → checkout `main` |
+| `gg sw <branch>` | `gg switch <branch>` | Checkout a branch |
+| `gg r <url>` | `gg remote <url>` | `git init` → add `origin` → first push to `main` |
+| `gg rs` | `gg restore` | Discard **all** uncommitted changes (asks first) |
+| `gg rs <file>` | `gg restore <file>` | Discard changes to one file |
+
+### Setup & tooling
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `gg setup` | `gg setup` / `gg onboard` | Interactive OpenRouter onboard (key, model, language) |
+| `gg config` | `gg config` | Show config (key masked, model, language) |
+| `gg config set …` | same | Set `model`, `key`, or `language` |
+| `gg config path` | same | Print config file path |
+| `gg config reset` | same | Re-run full onboard |
+| `gg mo [slug]` | `gg model [slug]` | Show or switch AI model |
+| `gg u` | `gg update` | Check npm and install latest |
+| `gg v` | `gg version` | Version + install + config paths |
+| `gg h` | `gg help` | Command list (also bare `gg`) |
+| `gg start` | `gg start` | Open the optional web UI for this folder |
+
+---
+
+## Flags
+
+| Flag | Commands | Effect |
+|------|----------|--------|
+| `-m "msg"` / `--message "msg"` | Any command that commits | Use this message instead of AI / default |
+| `-y` / `--yes` | `restore` / `rs` | Skip the destructive confirmation |
+| `-v` / `-V` / `--version` | — | Same as `version` |
+| `-h` / `--help` | — | Same as `help` |
+
+```bash
+gg c -m "fix: handle null user"
+gg cnp -m "feat: add search filters"
+gg rs -y
+gg rs src/app.ts -y
+```
+
+---
+
+## Configuration
+
+### First-time setup
+
+```bash
+gg setup
+```
+
+Prompts for:
+
+1. **OpenRouter API key** (hidden input — never echoed)
+2. **Model** (default: `google/gemini-2.0-flash-001`)
+3. **Language** for commit messages (`en` or `pt`)
+
+Get a free/paid key at [openrouter.ai](https://openrouter.ai).
+
+### Show & edit
+
+```bash
+gg config                          # show (key is masked)
+gg config set model google/gemini-2.0-flash-001
+gg config set language pt
+gg config set key sk-or-v1-…
+gg model                           # show current model
+gg mo anthropic/claude-3.5-sonnet  # switch model
+gg config reset                    # full re-onboard
+```
+
+### Where config lives
 
 | OS | Path |
 |----|------|
@@ -164,250 +200,118 @@ User config is stored outside the repo:
 | macOS | `~/Library/Application Support/gitgen/config.json` |
 | Linux | `~/.config/gitgen/config.json` |
 
-Env overrides (optional): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `COMMIT_LANGUAGE`, `GITGEN_CONFIG_DIR`.
+Permissions are owner-only where supported. The key stays on your machine and is only sent to OpenRouter when generating a message.
 
-### Web app (local development)
+### Environment overrides (optional)
 
-```bash
-git clone https://github.com/MusicMaster4/git-command-generator.git
-cd git-command-generator
-npm install
-cp .env.example .env.local   # optional server keys for the Next.js app
-npm run dev
-```
-
-Open **[http://localhost:2001](http://localhost:2001)**.
-
-### Scripts
-
-| Command | What it does |
-|---------|--------------|
-| `npm run dev` | Dev server on port **2001** |
-| `npm run build` | Production build (web) |
-| `npm run build:cli` | Build Node CLI → `dist/cli.js` |
-| `npm run start` | Serve the web build (port 2001) |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript check |
-| `npm test` | Unit tests (config + update logic) |
-| `npm run here` | Open app with **current directory** (`?path=`) |
-| `gg` / `gitgen` | CLI on PATH after global install — see [CLI](#cli) |
-
-### Releases
-
-Push to `main` runs `.github/workflows/release.yml`: patch bump, tag, GitHub Release, and `npm publish` when the `NPM_TOKEN` secret is set. Commits with `[skip release]` or messages starting with `chore(release):` do not publish (anti-loop).
+| Variable | Purpose |
+|----------|---------|
+| `OPENROUTER_API_KEY` | API key (overrides file) |
+| `OPENROUTER_MODEL` | Model slug |
+| `COMMIT_LANGUAGE` | `en` or `pt` |
+| `GITGEN_CONFIG_DIR` | Custom config directory |
+| `GCG_PORT` | Web UI port for `gg start` (default `2001`) |
 
 ---
 
-## CLI
-
-Run Git Command Generator from **any** project folder via **`gg`**, **`gitgen`**, or **`git-gen`** (same binary from the npm global install).
-
-| Launcher | Notes |
-|----------|--------|
-| `gg` | Short name (recommended) |
-| `gitgen` | Full name |
-| `git-gen` | Same as `gitgen` (npm bin alias) |
-
-Bare `gg` / `gitgen` (no arguments) prints **help** — it does **not** open the app. Use **`gg start`** to open the web UI.
-
-### Install
+## Examples
 
 ```bash
-npm install -g git-command-generator
-# update later:
-npm update -g git-command-generator
-# or:
-gitgen update
-# see where it landed:
-gitgen version
+# Everyday commit + push
+gg cnp
+
+# Commit only (stay local)
+gg c
+
+# Explicit message (no AI)
+gg c p -m "chore: bump dependencies"
+
+# Feature branch end-to-end
+gg b feature/checkout
+# …work…
+gg cnp
+gg m feature/checkout          # merge into main and push
+
+# Merge into a non-main branch
+gg m feature/checkout develop
+
+# Park work and jump back to main
+gg s
+
+# Switch branches
+gg sw develop
+
+# Brand-new repo → GitHub
+gg r https://github.com/you/new-repo.git
+
+# Undo uncommitted mess (confirm required unless -y)
+gg rs
+gg rs package-lock.json
 ```
 
-Prefer the **npm global** commands on PATH. The repo’s `scripts/gg.cmd` / `gitgen.cmd` / `git-gen.cmd` are for local development only — do not add `scripts/` to PATH in normal use.
+### Live progress
 
-### Open the web app
-
-```bash
-gg start
-# same as: gitgen start
-```
-
-| Server state | Behavior |
-|--------------|----------|
-| Already running on `localhost:2001` | Opens the browser with `?path=` for the current folder |
-| Offline | Starts `npm run dev` in the background, waits, then opens the browser |
-
-Uses `scripts/open-here.ps1` (Windows) or `open-here.mjs` under the hood.
-
-### Workflows in the terminal
-
-Every app card also works as a CLI command — **no browser, no server**. Commands run `git` in the current folder and reuse the same AI message generator (`lib/commit-message.ts`).
-
-**Short commands** (recommended) and long forms both work on `gg` and `gitgen`:
-
-```bash
-gg start                   # open the web app with current folder
-gg c                       # commit only
-gg c p                     # commit + push
-gg b feature/x             # create branch → add → commit → push -u
-gg m feature/x             # merge feature/x into main
-gg m feature/x dev         # merge feature/x into dev
-gg s                       # commit work, then checkout main
-gg sw main                 # switch branch
-gg r <url>                 # init + remote + first push (main)
-gg rs                      # restore all uncommitted changes (confirms)
-gg rs src/x.ts             # restore one file
-gg v                       # print version
-gg h                       # help
-```
-
-| Short | Long | App card | What it does |
-|-------|------|----------|--------------|
-| `gg start` | `gitgen start` | — | Open the web app with the current folder |
-| `gg c` | `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
-| `gg c p` | `gitgen commit push` | 01 Commit + Push | …then `git push` (`p` = short for `push`) |
-| `gg b <name>` | `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
-| `gg m <src> [dst]` | `gitgen merge <src> [dst]` | 04 Merge into Main | commit → `checkout <dst or main>` → `merge <src>` → push |
-| `gg s` | `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
-| `gg sw <branch>` | `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
-| `gg r <url>` | `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
-| `gg rs [file]` | `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
-| `gg setup` | `gitgen setup` | — | OpenRouter onboard (API key + model + language) |
-| `gg config` | `gitgen config` | — | Show / set user config (`config set model …`) |
-| `gg u` | `gitgen update` | — | Check npm registry and install latest |
-| `gg v` | `gitgen version` | — | Print version **and install path** (`package.json`; also `--version` / `-V`) |
-| `gg h` | `gitgen help` | — | Show all commands (same as bare `gg`) |
-
-### Versioning
-
-The CLI version is **`package.json` → `version`** (single source of truth via `lib/version.ts`).
-
-```bash
-gitgen version          # or: gg v  ·  gitgen --version  ·  npm run version:show
-```
-
-To release (updates `package.json` and prepends `CHANGELOG.md`):
-
-```bash
-npm run version:patch   # 1.0.0 → 1.0.1
-npm run version:minor   # 1.0.0 → 1.1.0
-npm run version:major   # 1.0.0 → 2.0.0
-# optional note:
-npx tsx scripts/bump-version.ts patch "fix restore confirm on Windows"
-```
-
-### Flags, AI messages, progress
-
-| Flag | Applies to | Effect |
-|------|------------|--------|
-| `-m "msg"` / `--message` | any command that commits | Use this commit message instead of AI/default |
-| `-y` / `--yes` | `restore` / `rs` | Skip the destructive confirmation prompt |
-
-- **AI messages:** omit `-m` and, if an API key is set in `.env.local`, the message is generated from your diff (same as the app). Without a key, a sensible default is used (`feat: update`, `wip: saving progress`, …).
-- **AI config:** OpenRouter key/model from user config (`gitgen setup`) or `OPENROUTER_*` env. First AI use without a key runs setup interactively.
-- **Live progress:** each step is one short line (spinner + `✓`/`✗` + time). Labels stay compact (`git commit`, not the full `-m` text). Pushes show a small % bar only for transfer phases — no “Total N (delta…)” spam:
+Each step prints a compact status line (spinner, checkmark, timing). Pushes show a small transfer bar only while objects are counting/writing:
 
 ```text
   ⠹ git push [████████░░░░░░]  63% Writing  2.3s
   ✓ git push  4.1s
 ```
 
-### CLI env vars
+---
 
-| Env var | Default | Purpose |
-|---------|---------|---------|
-| `GCG_PORT` | `2001` | Dev server port when using `gg start` |
-| `GCG_TIMEOUT` | varies | How long to wait for the server to come up (seconds) |
-| `GCG_TTY` | — | Set by launchers so spinners work under PowerShell/cmd |
+## How AI commits work
 
-Implementation: `scripts/cli.ts` → `dist/cli.js` (Node). Published bins: `gitgen`, `git-gen`, `gg` (via `npm install -g`). Local `scripts/*.cmd` are dev-only — use the npm PATH bins in daily work.
+When you omit `-m` and a key is configured:
+
+1. CLI runs `git status` / name-status / diff in **your current folder**
+2. A compact summary is sent to OpenRouter
+3. The model returns a short Conventional Commit subject
+4. That message is used for `git commit`
+
+| Situation | Result |
+|-----------|--------|
+| Key set, no `-m` | AI message from local diff |
+| `-m "…"` passed | Your message, no API call |
+| No key | Default message (`feat: update`, etc.) |
+| Clean working tree | Nothing to commit — exits cleanly |
+
+First AI use without a key launches the setup wizard automatically.
 
 ---
 
-## AI commit generation
+## Optional web UI
 
-### Setup
+The package is **CLI-first**. There is also a local Next.js UI if you clone the full repo.
 
-1. **Folder** — via `gitgen start`, the startup modal, or **Settings → Change**
-2. **Provider & model** — OpenRouter or OpenAI
-3. **API key** — in `.env.local` and/or the UI
-4. **Language** — English or Portuguese for generated messages
+```bash
+git clone https://github.com/MusicMaster4/git-command-generator.git
+cd git-command-generator
+npm install
+npm run dev          # http://localhost:2001
+```
 
-### Usage
+From a full checkout (not the slim npm install), `gg start` can open the app with the current folder as `?path=`. From a global npm install, `gg start` opens the browser only if the server is already running on port `2001`.
 
-1. Edit files in your real repo.
-2. Open a card (Commit + Push, Create Branch, etc.).
-3. Leave the commit message **empty**.
-4. Click **Copy**.
-
-The API runs `git` locally, sends a compact diff to the model, and builds the full command block with the generated message.
-
-Without a key or valid folder, cards still copy commands using sensible default messages.
-
-Recent folders are saved in `localStorage` for the next session.
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Dev server on port **2001** |
+| `npm run build` | Production web build |
+| `npm run build:cli` | Bundle CLI → `dist/cli.js` |
+| `npm test` | Unit tests |
+| `npm run typecheck` | TypeScript check |
+| `npm run lint` | ESLint |
 
 ---
 
 ## Security
 
-> **Treat API keys like passwords.**
+- API keys live in a **user config file** or env vars — never in the repo
+- Key input in `gg setup` is **hidden** (not echoed)
+- Config file mode is restricted to the owner when the OS allows it
+- Diffs leave your machine only when you generate an AI commit (OpenRouter)
 
-| Item | Committed to git? |
-|------|-------------------|
-| `.env.local` (real keys) | **No** — gitignored |
-| `.env.example` (placeholders) | Yes — safe template |
-| Keys typed in the UI | Browser `localStorage` only |
-| `node_modules/`, `.next/`, logs | **No** |
-
-**Rules:**
-
-- Never commit `.env`, `.env.local`, or files with filled-in `API_KEY` values.
-- Do not `git add -f` environment files.
-- Before your first push, verify:
-
-```bash
-git status
-git ls-files --others --exclude-standard
-```
-
-The API uses server-side keys (`Authorization: Bearer` to OpenRouter/OpenAI). The frontend only sends a key if you typed one in the UI.
-
----
-
-## Project structure
-
-```text
-app/
-  api/commit-message/route.ts   # HTTP wrapper around lib/commit-message
-  HomeClient.tsx                # main UI + folder modal
-  page.tsx                      # SSR env defaults (no key exposure)
-  layout.tsx
-  globals.css
-lib/
-  commit-message.ts             # shared git + AI generation (app + CLI)
-  version.ts                    # getVersion() — reads package.json
-scripts/
-  cli.ts                        # CLI entry: start, workflows, version, short aliases, help
-  bump-version.ts               # semver bump → package.json + CHANGELOG.md
-  gg.cmd / gitgen.cmd / git-gen.cmd  # dev-only launchers (prefer npm -g bins)
-  open-here.ps1 / .cmd / .mjs   # open app with cwd (?path=); used by `gg start`
-  tray.ps1 / tray.vbs           # background server tray helper (Windows)
-CHANGELOG.md                    # release notes (kept in sync by bump script)
-start-dev.bat                   # start server + open browser
-.env.example                    # public template
-LICENSE                         # non-commercial
-```
-
----
-
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| Framework | Next.js 16 (App Router) |
-| UI | React 19, Tailwind CSS 4 |
-| Language | TypeScript 5 |
-| Runtime | Node.js 18+ (CLI) · npm package manager |
-| AI | OpenRouter (CLI setup) · OpenRouter/OpenAI (web app) |
+Treat keys like passwords. Do not commit `.env.local` or filled-in secrets.
 
 ---
 
@@ -415,11 +319,9 @@ LICENSE                         # non-commercial
 
 **Free for personal use, learning, and non-commercial projects.**
 
-You may not sell the app, parts of it, or monetize it (paid SaaS, commercial product, paid bundle, etc.) without written permission.
+Commercial use, resale, or paid hosting requires written permission.
 
-See [LICENSE](./LICENSE) for full terms (same spirit as the *Non-Commercial License* used in projects like WaterDrop).
-
-Commercial licenses or exceptions: contact the author.
+See [LICENSE](./LICENSE) for full terms.
 
 ---
 
@@ -427,6 +329,6 @@ Commercial licenses or exceptions: contact the author.
 
 **Jubarte** · 2026
 
-<sub>Built for speed in the terminal — <code>gg c p</code> and commit messages that don't embarrass you.</sub>
+<sub><code>gg cnp</code> — commit messages that don't embarrass you.</sub>
 
 </div>
