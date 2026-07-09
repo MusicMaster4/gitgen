@@ -14,6 +14,7 @@
   "type": "module",
   "bin": {
     "gitgen": "./dist/cli.js",
+    "git-gen": "./dist/cli.js",
     "gg": "./dist/cli.js"
   },
   "files": [

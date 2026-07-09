@@ -1,9 +1,12 @@
 # Abre o Git Command Generator com a pasta atual (cwd).
 # Se o server nao estiver rodando, sobe em uma janela nova de CMD e espera ficar pronto.
 #
-# Uso:  gitgen start
+# Uso:  gitgen start          (preferido — via npm global CLI)
 #       .\open-here.ps1
 #       .\open-here.ps1 -Port 2001
+#
+# Nao registre este script como function/alias `gitgen` no profile:
+# isso sobrescreve o bin do npm e faz bare `gitgen` abrir o server.
 
 param(
   [Parameter(Position = 0, ValueFromRemainingArguments = $true)]

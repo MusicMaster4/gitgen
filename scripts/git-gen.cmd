@@ -1,5 +1,6 @@
 @echo off
 REM git-gen — alias of gitgen / gg (Node CLI)
+REM Dev-only. Prefer: npm install -g git-command-generator
 setlocal
 set "GCG_TTY=1"
 set "ROOT=%~dp0.."

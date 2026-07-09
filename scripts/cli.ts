@@ -3,7 +3,8 @@
  * Runs git in the current folder (no server needed) and reuses lib/commit-message.ts.
  *
  * Config: user-level OpenRouter settings (see lib/config.ts). Env overrides allowed.
- * Run:  node dist/cli.js <cmd>  |  gitgen <cmd>  |  gg <cmd>
+ * Run:  node dist/cli.js <cmd>  |  gitgen <cmd>  |  git-gen <cmd>  |  gg <cmd>
+ * Prefer npm global bins (npm install -g). Bare command = help; use `start` for the web UI.
  *
  * Long form              Short        What it does
  * ─────────────────────  ───────────  ──────────────────────────────────────────
@@ -30,6 +31,8 @@
  * Also: --version / -v / -V (same as version)
  */
 import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createConnection } from "node:net";
 import { promisify } from "node:util";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
@@ -514,38 +517,118 @@ function isPushToken(t: string | undefined): boolean {
   return v === "push" || v === "p";
 }
 
-/** Open the web app for the current folder (local-dev; needs a checkout of this repo). */
+/** Where this CLI is installed (npm global prefix, local clone, etc.). */
+function installPaths(): {
+  packageRoot: string;
+  entry: string;
+  configPath: string;
+} {
+  return {
+    packageRoot,
+    entry: process.argv[1] || "",
+    configPath: getConfigPath(),
+  };
+}
+
+function printInstallDetails(): void {
+  const { packageRoot: root, entry, configPath } = installPaths();
+  log(row("version", getVersion()));
+  log(row("package", getPackageName()));
+  log(row("install", c.dim(root)));
+  if (entry) log(row("entry", c.dim(entry)));
+  log(row("config", c.dim(configPath)));
+  log(row("bins", c.dim("gitgen · git-gen · gg  (npm global PATH)")));
+  log(`  ${c.dim("update")} ${c.cyan(`npm install -g ${getPackageName()}`)}  ${c.dim("or")} ${c.cyan("gitgen update")}`);
+}
+
+function openBrowser(url: string): void {
+  if (process.platform === "win32") {
+    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    return;
+  }
+  if (process.platform === "darwin") {
+    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+    return;
+  }
+  spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+}
+
+function testLocalPort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    const done = (ok: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(300);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
+/**
+ * Open the web app for the current folder.
+ * - Full checkout: uses scripts/open-here (can start `npm run dev`).
+ * - npm global install: opens the browser if the server is already up.
+ */
 async function openApp(): Promise<void> {
   const port = process.env.GCG_PORT || "2001";
+  const openHerePs1 = join(packageRoot, "scripts", "open-here.ps1");
+  const openHereMjs = join(packageRoot, "scripts", "open-here.mjs");
+  const hasDevLauncher =
+    process.platform === "win32" ? existsSync(openHerePs1) : existsSync(openHereMjs);
+
   banner("start web app");
-  log(`  ${c.dim("note   web UI is local-dev (npm run dev in a full checkout)")}`);
-  await new Promise<void>((resolve, reject) => {
-    const child =
-      process.platform === "win32"
-        ? spawn(
-            "powershell",
-            [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              join(packageRoot, "scripts", "open-here.ps1"),
-              "-Port",
-              port,
-            ],
-            { stdio: "inherit", cwd, windowsHide: true }
-          )
-        : spawn(process.execPath, [join(packageRoot, "scripts", "open-here.mjs")], {
-            stdio: "inherit",
-            cwd,
-            env: { ...process.env, GCG_PORT: port },
-          });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) resolve();
-      else process.exit(code ?? 1);
+
+  if (hasDevLauncher) {
+    log(`  ${c.dim("note   full checkout — may start npm run dev if offline")}`);
+    await new Promise<void>((resolve, reject) => {
+      const child =
+        process.platform === "win32"
+          ? spawn(
+              "powershell",
+              [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                openHerePs1,
+                "-Port",
+                port,
+              ],
+              { stdio: "inherit", cwd, windowsHide: true }
+            )
+          : spawn(process.execPath, [openHereMjs], {
+              stdio: "inherit",
+              cwd,
+              env: { ...process.env, GCG_PORT: port },
+            });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else process.exit(code ?? 1);
+      });
     });
-  });
+    return;
+  }
+
+  // Published npm package has no scripts/ — only open the browser if the UI is up.
+  const url = `http://localhost:${port}/?path=${encodeURIComponent(cwd)}`;
+  log(row("url", c.dim(url)));
+  log(row("cli", c.dim(packageRoot)));
+  if (await testLocalPort(Number(port))) {
+    log(`  ${sym.ok} ${c.green("server online")} ${c.dim(`:${port}`)}`);
+    openBrowser(url);
+    log(`  ${sym.ok} ${c.green("opened browser")}`);
+    return;
+  }
+  log(`  ${sym.warn} ${c.yellow(`no server on :${port}`)}`);
+  log(`  ${c.dim("The CLI package is npm-only. Web UI needs a full clone:")}`);
+  log(`  ${c.dim("  git clone <repo> && npm install && npm run dev")}`);
+  log(`  ${c.dim("Then:")} ${c.cyan("gitgen start")}  ${c.dim("or open")} ${c.underline(c.cyan(url))}`);
+  process.exitCode = 1;
 }
 
 async function cmdConfig(): Promise<void> {
@@ -697,6 +780,7 @@ async function cmdUpdate(): Promise<void> {
 
 function helpText(): string {
   const { apiKey, model } = currentSettings();
+  const { packageRoot: root } = installPaths();
   const d = c.dim;
   const rows: Array<[string, string, string]> = [
     ["start", "start", "open the web app with this folder"],
@@ -712,7 +796,7 @@ function helpText(): string {
     ["setup / onboard", "setup", "OpenRouter onboard (hidden key + model)"],
     ["config [show|set|path|reset]", "config", "show/set config · reset = re-onboard"],
     ["update", "u", "check npm / install latest"],
-    ["version", "v", "print installed version"],
+    ["version", "v", "print version + install path"],
     ["help", "h", "show this list (default if no command)"],
   ];
   const longW = Math.max(...rows.map((r) => r[0].length));
@@ -722,9 +806,10 @@ function helpText(): string {
     .join("\n");
 
   return `
-  ${c.bold(c.cyan("gitgen / gg"))} ${d("— terminal git workflows")}
+  ${c.bold(c.cyan("gitgen / git-gen / gg"))} ${d("— terminal git workflows")}
   ${d(`v${getVersion()} · ${APP_NAME}`)}
   ${d("folder")} ${d(cwd)}
+  ${d("install")} ${d(root)}
 
   ${c.bold("Long".padEnd(longW))}  ${c.bold("Short".padEnd(shortW))}  ${c.bold("Action")}
   ${d("─".repeat(longW))}  ${d("─".repeat(shortW))}  ${d("─".repeat(42))}
@@ -732,7 +817,9 @@ ${body}
 
   ${c.bold("Examples")}
     ${d("$")} npm install -g ${getPackageName()}
+    ${d("$")} gitgen version         ${d("# where this CLI lives")}
     ${d("$")} gg setup
+    ${d("$")} gg start               ${d("# open web UI (not bare gg)")}
     ${d("$")} gg cnp                 ${d("# commit + push")}
     ${d("$")} gg mo google/gemini-2.0-flash-001
     ${d("$")} gg config reset        ${d("# redo the full onboard")}
@@ -752,7 +839,8 @@ async function main() {
     case "version":
     case "--version":
     case "-v":
-      log(`  ${c.bold(c.cyan(CLI_NAME))} ${c.bold(getVersion())} ${c.dim(`· ${APP_NAME}`)}`);
+      log(header(`${CLI_NAME} · ${getVersion()}`));
+      printInstallDetails();
       return;
 
     case "setup":

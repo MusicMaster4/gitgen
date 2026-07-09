@@ -1,6 +1,7 @@
 @echo off
 REM gg — short alias for gitgen (Git Command Generator)
-REM Local PATH: points at built Node CLI (run npm run build:cli after clone).
+REM Dev-only launcher for this clone. Prefer: npm install -g git-command-generator
+REM (puts gg/gitgen/git-gen on the npm global PATH).
 setlocal
 set "GCG_TTY=1"
 set "ROOT=%~dp0.."

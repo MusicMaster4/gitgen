@@ -130,7 +130,24 @@ Requires [Node.js 18+](https://nodejs.org) and Git on your `PATH`.
 npm install -g git-command-generator
 ```
 
-This puts **`gitgen`** and **`gg`** on your PATH. First AI use runs an OpenRouter setup wizard (API key + model). You can also run:
+This installs the **published** package and puts **`gitgen`**, **`git-gen`**, and **`gg`** on your PATH via npm’s global bin directory — **not** the local `scripts/` folder in a clone.
+
+| OS | npm global bins (commands) | package install dir |
+|----|----------------------------|---------------------|
+| Windows | `%APPDATA%\npm\` (`gitgen.cmd`, `gg.cmd`, …) | `%APPDATA%\npm\node_modules\git-command-generator\` |
+| macOS / Linux | `$(npm prefix -g)/bin/` | `$(npm root -g)/git-command-generator/` |
+
+Confirm anytime:
+
+```bash
+gitgen version             # version + install path + config path
+where gitgen               # Windows — which executable wins on PATH
+which gitgen               # macOS / Linux
+```
+
+**Do not** put the repo’s `scripts/` on PATH or wrap `open-here.ps1` as `gitgen` in your shell profile — that shadows the npm CLI and makes bare `gitgen` open the web server. Use **`gitgen start`** when you want the UI.
+
+First AI use runs an OpenRouter setup wizard (API key + model). You can also run:
 
 ```bash
 gitgen setup
@@ -183,14 +200,15 @@ Push to `main` runs `.github/workflows/release.yml`: patch bump, tag, GitHub Rel
 
 ## CLI
 
-Run Git Command Generator from **any** project folder via **`gg`** or **`gitgen`** (same binary).
+Run Git Command Generator from **any** project folder via **`gg`**, **`gitgen`**, or **`git-gen`** (same binary from the npm global install).
 
 | Launcher | Notes |
 |----------|--------|
 | `gg` | Short name (recommended) |
 | `gitgen` | Full name |
+| `git-gen` | Same as `gitgen` (npm bin alias) |
 
-Bare `gg` / `gitgen` (no arguments) prints **help** — it does **not** open the app.
+Bare `gg` / `gitgen` (no arguments) prints **help** — it does **not** open the app. Use **`gg start`** to open the web UI.
 
 ### Install
 
@@ -200,9 +218,12 @@ npm install -g git-command-generator
 npm update -g git-command-generator
 # or:
 gitgen update
+# see where it landed:
+gitgen version
 ```
 
-From a clone (local PATH via `scripts/*.cmd` on Windows), run `npm run build:cli` once so `dist/cli.js` exists, then add `scripts/` to PATH if you want the wrappers.
+Prefer the **npm global** commands on PATH. The repo’s `scripts/gg.cmd` / `gitgen.cmd` / `git-gen.cmd` are for local development only — do not add `scripts/` to PATH in normal use.
+
 ### Open the web app
 
 ```bash
@@ -253,7 +274,7 @@ gg h                       # help
 | `gg setup` | `gitgen setup` | — | OpenRouter onboard (API key + model + language) |
 | `gg config` | `gitgen config` | — | Show / set user config (`config set model …`) |
 | `gg u` | `gitgen update` | — | Check npm registry and install latest |
-| `gg v` | `gitgen version` | — | Print installed version (`package.json`; also `--version` / `-V`) |
+| `gg v` | `gitgen version` | — | Print version **and install path** (`package.json`; also `--version` / `-V`) |
 | `gg h` | `gitgen help` | — | Show all commands (same as bare `gg`) |
 
 ### Versioning
@@ -298,7 +319,7 @@ npx tsx scripts/bump-version.ts patch "fix restore confirm on Windows"
 | `GCG_TIMEOUT` | varies | How long to wait for the server to come up (seconds) |
 | `GCG_TTY` | — | Set by launchers so spinners work under PowerShell/cmd |
 
-Implementation: `scripts/cli.ts` → `dist/cli.js` (Node). Package bins: `gitgen`, `gg`. Local launchers: `scripts/gg.cmd`, `gitgen.cmd`, `git-gen.cmd`.
+Implementation: `scripts/cli.ts` → `dist/cli.js` (Node). Published bins: `gitgen`, `git-gen`, `gg` (via `npm install -g`). Local `scripts/*.cmd` are dev-only — use the npm PATH bins in daily work.
 
 ---
 
@@ -367,7 +388,7 @@ lib/
 scripts/
   cli.ts                        # CLI entry: start, workflows, version, short aliases, help
   bump-version.ts               # semver bump → package.json + CHANGELOG.md
-  gg.cmd / gitgen.cmd / git-gen.cmd  # PATH launchers → cli.ts (bare = help)
+  gg.cmd / gitgen.cmd / git-gen.cmd  # dev-only launchers (prefer npm -g bins)
   open-here.ps1 / .cmd / .mjs   # open app with cwd (?path=); used by `gg start`
   tray.ps1 / tray.vbs           # background server tray helper (Windows)
 CHANGELOG.md                    # release notes (kept in sync by bump script)
