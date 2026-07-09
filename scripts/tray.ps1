@@ -116,8 +116,5 @@ $miQuit.add_Click({
 $notify.ContextMenuStrip = $menu
 $notify.add_MouseDoubleClick({ Start-Process $baseUrl })
 
-# aviso discreto ao subir
-$notify.ShowBalloonTip(2000, "Git Command Generator", "Server rodando em segundo plano na porta $Port.", [System.Windows.Forms.ToolTipIcon]::Info)
-
 # --- loop de mensagens (segura o processo vivo) ---
 [System.Windows.Forms.Application]::Run()
