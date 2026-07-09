@@ -1,4 +1,5 @@
 @import "tailwindcss";
+/* gen-badge segue a cor do card (default verde); shimmer via --shimmer */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -224,6 +225,44 @@ h1 span { color: var(--accent); }
 @keyframes card-countdown {
   from { width: 100%; }
   to   { width: 0%; }
+}
+
+/* generating: shimmer no card inteiro enquanto a IA gera a mensagem.
+   --shimmer é o rgb da cor do card (default = verde accent) */
+.card.generating {
+  --shimmer: 200, 255, 0;
+}
+.card.blue.generating    { --shimmer: 61, 184, 255; }
+.card.danger.generating  { --shimmer: 255, 64, 64; }
+.card.warning.generating { --shimmer: 255, 140, 0; }
+
+.card.generating,
+.card.generating:focus-within {
+  border-color: rgb(var(--shimmer));
+  box-shadow: none;
+}
+
+.card.generating::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(var(--shimmer), .05) 40%,
+    rgba(var(--shimmer), .16) 50%,
+    rgba(var(--shimmer), .05) 60%,
+    transparent 75%
+  );
+  background-size: 220% 100%;
+  animation: card-shimmer 1.15s linear infinite;
+}
+
+@keyframes card-shimmer {
+  from { background-position: 160% 0; }
+  to   { background-position: -60% 0; }
 }
 
 .card-header {
@@ -458,13 +497,20 @@ input::placeholder { color: #2e2e2e; }
   font-family: var(--mono);
   font-size: .6rem;
   letter-spacing: .06em;
-  color: var(--blue);
+  color: var(--accent);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.gen-badge.err { color: var(--red); }
+.blue .gen-badge    { color: var(--blue); }
+.danger .gen-badge  { color: var(--red); }
+.warning .gen-badge { color: var(--orange); }
+
+.gen-badge.err,
+.blue .gen-badge.err,
+.danger .gen-badge.err,
+.warning .gen-badge.err { color: var(--red); }
 
 .spinner {
   width: 10px; height: 10px;
@@ -690,7 +736,7 @@ input.input-error {
   margin-bottom: 10px;
 }
 
-.folder-modal h2 span { color: var(--accent); }
+.folder-modal h2 span { color: var(--blue); }
 
 .folder-modal-sub {
   font-size: .8rem;
@@ -805,3 +851,26 @@ input.input-error {
 }
 
 .folder-modal-actions .btn-copy { flex: 1; min-width: 140px; justify-content: center; }
+
+/* modal em tema azul consistente (evita mistura verde/azul) */
+.folder-modal .btn-copy {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #000;
+}
+.folder-modal .btn-copy:hover {
+  background: #000;
+  color: var(--blue);
+  box-shadow: 2px 2px 0 var(--blue);
+}
+.folder-modal .btn-copy.secondary {
+  background: transparent;
+  color: var(--blue);
+  border-color: var(--border);
+}
+.folder-modal .btn-copy.secondary:hover {
+  border-color: var(--blue);
+  box-shadow: 2px 2px 0 var(--blue);
+  color: var(--blue);
+  background: rgba(61, 184, 255, .06);
+}

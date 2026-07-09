@@ -379,7 +379,9 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
   }, []);
 
   const cardClass = (id: string, extra = "") =>
-    `card${extra ? ` ${extra}` : ""}${msgCountdowns[id] ? " countdown" : ""}`;
+    `card${extra ? ` ${extra}` : ""}${msgCountdowns[id] ? " countdown" : ""}${
+      cardState[id]?.status === "gen" ? " generating" : ""
+    }`;
 
   const cardCountdownBar = (id: string) =>
     msgCountdowns[id] ? <div key={msgCountdowns[id]} className="card-countdown" aria-hidden /> : null;
