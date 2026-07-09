@@ -68,11 +68,7 @@ function CopyRow({
         <CopyIcon />
         {st === "gen" ? "Gerando…" : label}
       </button>
-      {st === "gen" && (
-        <span className="gen-badge">
-          <span className="spinner" /> gerando commit…
-        </span>
-      )}
+      {st === "gen" && <span className="gen-badge">gerando commit…</span>}
       {st === "copied" && <span className="copied-badge visible" style={color ? { color } : undefined}>✓ copiado</span>}
       {st === "error" && <span className="gen-badge err">⚠ {state?.error}</span>}
     </div>
@@ -181,6 +177,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
   const [cardState, setCardState] = useState<Record<string, CardState>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  /** timestamp por card — chave do elemento da barra (reinicia a animação de 30s) */
+  const [msgCountdowns, setMsgCountdowns] = useState<Record<string, number>>({});
   const badgeTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const msgClearTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -198,11 +196,25 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
   const scheduleMsgClear = useCallback((id: string, setMsg: (v: string) => void) => {
     clearTimeout(msgClearTimers.current[id]);
+    const startedAt = Date.now();
+    setMsgCountdowns((prev) => ({ ...prev, [id]: startedAt }));
     msgClearTimers.current[id] = setTimeout(() => {
       setMsg("");
+      setMsgCountdowns((prev) => {
+        if (prev[id] !== startedAt) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       delete msgClearTimers.current[id];
     }, 30_000);
   }, []);
+
+  const cardClass = (id: string, extra = "") =>
+    `card${extra ? ` ${extra}` : ""}${msgCountdowns[id] ? " countdown" : ""}`;
+
+  const cardCountdownBar = (id: string) =>
+    msgCountdowns[id] ? <div key={msgCountdowns[id]} className="card-countdown" aria-hidden /> : null;
 
   const flashField = (name: string) => {
     setFieldErrors((prev) => ({ ...prev, [name]: false }));
@@ -312,13 +324,11 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
       build: (m: string) => string
     ) => {
       let msg = currentMsg.trim();
-      let generated = false;
       if (canGenerate && !msg) {
         setCard(id, { status: "gen" });
         try {
           msg = await generateMessage();
           setMsg(msg);
-          generated = true;
         } catch (e) {
           const err = e instanceof Error ? e.message : "Falha ao gerar mensagem";
           await copyToClipboard(build("")); // copia com mensagem padrão como fallback
@@ -329,7 +339,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
       // Clipboard first so the user can paste ASAP; badge/state follow.
       await copyToClipboard(build(msg));
       flashCopied(id);
-      if (generated) scheduleMsgClear(id, setMsg);
+      // Sempre inicia a barra de 30s + reset da mensagem após copiar
+      scheduleMsgClear(id, setMsg);
     },
     [canGenerate, generateMessage, setCard, flashCopied, scheduleMsgClear]
   );
@@ -443,7 +454,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
         </div>
         <div className={`section-content${sectionCollapsed("s3") ? " collapsed" : ""}`}>
           {/* Commit + Push */}
-          <div className="card">
+          <div className={cardClass("push")}>
+            {cardCountdownBar("push")}
             <div className="card-header">
               <span className="card-title">01 — Commit + Push</span>
               <span className="card-sub">git add . → commit → push</span>
@@ -474,7 +486,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           </div>
 
           {/* Só Commit */}
-          <div className="card">
+          <div className={cardClass("commitOnly")}>
+            {cardCountdownBar("commitOnly")}
             <div className="card-header">
               <span className="card-title">02 — Só Commit (sem push)</span>
               <span className="card-sub">git add . → commit</span>
@@ -520,7 +533,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
         </div>
         <div className={`section-content${sectionCollapsed("s2") ? " collapsed" : ""}`}>
           {/* Criar Branch */}
-          <div className="card">
+          <div className={cardClass("branch")}>
+            {cardCountdownBar("branch")}
             <div className="card-header">
               <span className="card-title">03 — Criar Branch</span>
               <span className="card-sub">checkout -b → desenvolver → commit → push</span>
@@ -585,7 +599,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           </div>
 
           {/* Merge com Main */}
-          <div className="card warning">
+          <div className={cardClass("merge", "warning")}>
+            {cardCountdownBar("merge")}
             <div className="card-header">
               <span className="card-title">04 — Merge com Main</span>
               <span className="card-sub">commit → checkout main → merge → push</span>

@@ -195,6 +195,37 @@ h1 span { color: var(--accent); }
 .card.danger::before              { background: var(--red); }
 .card.warning::before             { background: var(--orange); }
 
+/* countdown: contorno some, fica só a linha de cima (30s até reset da msg) */
+.card.countdown,
+.card.countdown:focus-within {
+  border-color: var(--border);
+  box-shadow: none;
+}
+.card.countdown::before,
+.card.countdown:focus-within::before {
+  height: 0 !important;
+}
+
+.card-countdown {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--accent);
+  animation: card-countdown 30s linear forwards;
+  z-index: 5;
+  pointer-events: none;
+}
+.card.blue.countdown .card-countdown    { background: var(--blue); }
+.card.danger.countdown .card-countdown  { background: var(--red); }
+.card.warning.countdown .card-countdown { background: var(--orange); }
+
+@keyframes card-countdown {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
 .card-header {
   padding: 13px 20px;
   border-bottom: 2px solid var(--border);
@@ -386,7 +417,7 @@ input::placeholder { color: #2e2e2e; }
 .btn-copy:hover    { background: #000; color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
 .btn-copy:active   { transform: translate(2px,2px); box-shadow: none; }
 .btn-copy svg      { width: 11px; height: 11px; flex-shrink: 0; }
-.btn-copy:disabled { opacity: .7; cursor: wait; }
+.btn-copy:disabled { opacity: .7; cursor: not-allowed; }
 
 .blue .btn-copy    { background: var(--blue);   border-color: var(--blue);   color: #000; }
 .blue .btn-copy:hover { background: #000; color: var(--blue); box-shadow: 2px 2px 0 var(--blue); }

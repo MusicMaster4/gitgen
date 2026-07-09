@@ -21,7 +21,7 @@ const DEFAULT_MODELS: Record<Provider, string> = {
 
 /** Caps keep latency low — short Conventional Commits don't need a big window. */
 const MAX_DIFF_CHARS = 6000;
-const MAX_COMPLETION_TOKENS = 48;
+const MAX_COMPLETION_TOKENS = 64;
 
 const PROMPTS: Record<string, string> = {
   en: `Git commit message generator. Reply with ONE line only.
@@ -29,25 +29,25 @@ const PROMPTS: Record<string, string> = {
 Rules:
 - Conventional Commits: "<type>: <description>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
 - English, imperative, lowercase description
-- MAX 40 characters total. Prefer 25–35. Ultra short.
+- MAX 60 characters total. Short and specific.
 - ONLY the message. No quotes, no period, no extra text.
 
 Examples:
-feat: add commit AI
-fix: branch validation
-chore: bump deps`,
+feat: add automatic commit generation
+fix: correct branch field validation
+chore: bump project dependencies`,
   pt: `Gerador de mensagem de commit git. Responda com UMA linha apenas.
 
 Regras:
 - Conventional Commits: "<tipo>: <descricao>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
 - Portugues, imperativo, minusculas na descricao
-- MAX 40 caracteres no total. Prefira 25–35. Ultra curta.
+- MAX 60 caracteres no total. Curta e especifica.
 - APENAS a mensagem. Sem aspas, sem ponto final, sem texto extra.
 
 Exemplos:
-feat: adiciona IA de commit
-fix: validacao do branch
-chore: atualiza deps`,
+feat: adiciona geracao automatica de commit
+fix: corrige validacao do campo de branch
+chore: atualiza dependencias do projeto`,
 };
 
 interface CommitRequestBody {
@@ -99,10 +99,10 @@ function cleanMessage(raw: string): string {
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const candidate = stripEdges(lines[i]);
-    if (CC_RE.test(candidate)) return candidate.slice(0, 72);
+    if (CC_RE.test(candidate)) return candidate.slice(0, 60);
   }
 
-  return stripEdges(lines[lines.length - 1]).slice(0, 72);
+  return stripEdges(lines[lines.length - 1]).slice(0, 60);
 }
 
 function extractResponseText(data: unknown): string {
