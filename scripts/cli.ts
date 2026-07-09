@@ -80,13 +80,34 @@ function die(msg: string): never {
 
 /* ── live progress indicator ── */
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const BAR_WIDTH = 22;
+const CLEAR_EOL = "\x1b[K"; // erase from cursor to end of line
 const isTTY = Boolean(process.stdout.isTTY);
 const secs = (start: number) => `${((Date.now() - start) / 1000).toFixed(1)}s`;
 
+function bar(percent: number): string {
+  const pct = Math.max(0, Math.min(100, percent));
+  const filled = Math.round((pct / 100) * BAR_WIDTH);
+  return `[${"█".repeat(filled)}${"░".repeat(BAR_WIDTH - filled)}] ${String(Math.round(pct)).padStart(3)}%`;
+}
+
 /**
- * Run an async step with a live one-line indicator: spinner + elapsed time
- * (+ optional streamed detail such as git's own push progress). Falls back to
- * plain start/end lines when stdout isn't a TTY (piped/redirected).
+ * If a git progress fragment carries a percentage (e.g. "Writing objects: 60% (12/20)")
+ * render it as a real bar with the phase name; otherwise fall back to the raw text.
+ */
+function renderDetail(detail: string): string {
+  const m = detail.match(/(\d{1,3})%/);
+  if (m) {
+    const phase = detail.split(":")[0].trim();
+    return ` ${bar(parseInt(m[1], 10))}${phase ? ` ${phase}` : ""}`;
+  }
+  return detail ? ` — ${detail}` : "";
+}
+
+/**
+ * Run an async step with a live one-line indicator: spinner + elapsed time, plus a
+ * real progress bar whenever the step streams a percentage (git transfer progress).
+ * Falls back to plain start/end lines when stdout isn't a TTY (piped/redirected).
  */
 async function withProgress<T>(
   label: string,
@@ -96,11 +117,12 @@ async function withProgress<T>(
   let detail = "";
   let frame = 0;
   const setDetail = (s: string) => {
-    detail = s.length > 60 ? s.slice(0, 57) + "…" : s;
+    detail = s.length > 70 ? s.slice(0, 67) + "…" : s;
   };
   const draw = () => {
-    const d = detail ? ` — ${detail}` : "";
-    process.stdout.write(`\r  ${SPINNER[frame = (frame + 1) % SPINNER.length]} ${label}${d}  ${secs(start)}   `);
+    process.stdout.write(
+      `\r  ${SPINNER[(frame = (frame + 1) % SPINNER.length)]} ${label}${renderDetail(detail)}  ${secs(start)}${CLEAR_EOL}`
+    );
   };
   let timer: ReturnType<typeof setInterval> | undefined;
   if (isTTY) {
@@ -111,7 +133,7 @@ async function withProgress<T>(
   }
   const finish = (mark: string) => {
     if (timer) clearInterval(timer);
-    if (isTTY) process.stdout.write(`\r  ${mark} ${label}  ${secs(start)}${" ".repeat(24)}\n`);
+    if (isTTY) process.stdout.write(`\r  ${mark} ${label}  ${secs(start)}${CLEAR_EOL}\n`);
     else log(`  ${mark} ${label} (${secs(start)})`);
   };
   try {

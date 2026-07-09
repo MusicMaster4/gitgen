@@ -232,8 +232,13 @@ gitgen help                # list every command
 key is set, the message is generated from your diff (same as the app); with no key it falls back to a
 sensible default (`feat: update`, `wip: saving progress`, …).
 
-**Live progress:** each step shows a spinner with elapsed time and a `✓`/`✗` on completion; pushes stream
-git's own transfer progress (`Writing objects: 60%…`) so you can see how far along it is instead of waiting blind.
+**Live progress:** each step shows a spinner with elapsed time and a `✓`/`✗` on completion. Pushes render a
+**real progress bar** from git's own transfer stats, so you can watch the upload advance instead of waiting blind:
+
+```text
+  ⠹ git push  [██████████████░░░░░░░░]  63% Writing objects  2.3s
+  ✓ git push  4.1s
+```
 
 **Flags:** `-m "msg"` sets the commit message · `-y` / `--yes` skips the `restore` confirmation.
 
