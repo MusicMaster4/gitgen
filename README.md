@@ -101,14 +101,14 @@ Each card shows live output as you type.
 
 ```mermaid
 flowchart LR
-    A[Your repo] -->|gitgen or modal| B[Git Command Generator]
-    B --> C{Empty commit message?}
-    C -->|No| D[Build command block]
-    C -->|Yes + API key| E[/api/commit-message]
-    E -->|git status + diff| F[Local git]
-    E -->|context| G[OpenRouter / OpenAI]
+    A["Your repo"] -->|gitgen or modal| B["Git Command Generator"]
+    B --> C{"Empty commit message?"}
+    C -->|No| D["Build command block"]
+    C -->|Yes + API key| E["commit-message API"]
+    E -->|git status + diff| F["Local git"]
+    E -->|context| G["OpenRouter or OpenAI"]
     G -->|Conventional Commit| D
-    D --> H[Clipboard]
+    D --> H["Clipboard"]
 ```
 
 1. Point the app at your project folder.
@@ -197,6 +197,22 @@ gitgen
 | Already running on `localhost:2001` | Opens browser with `?path=` for current folder |
 | Offline | Starts `bun run dev` in background, waits, then opens browser |
 
+### Commit from the terminal
+
+No browser, no server needed — the CLI reuses the same AI logic and reads keys from `.env.local`:
+
+```bash
+gitgen commit        # git add -A -> AI commit message -> git commit
+gitgen commit push   # ...and then git push
+```
+
+| Command | What it does |
+|---------|--------------|
+| `gitgen commit` | Stages **everything**, generates a Conventional Commit from your diff, and commits |
+| `gitgen commit push` | Same as above, then `git push` |
+
+Runs entirely locally via `scripts/commit.ts` (Bun). Uses `AI_PROVIDER`, the matching `*_API_KEY` / `*_MODEL`, and `COMMIT_LANGUAGE` from `.env.local`.
+
 Equivalent to `scripts/open-here.ps1` / `open-here.mjs`. Add `scripts/` to your user `PATH` once:
 
 ```powershell
@@ -265,14 +281,17 @@ The API uses server-side keys (`Authorization: Bearer` to OpenRouter/OpenAI). Th
 
 ```text
 app/
-  api/commit-message/route.ts   # git + AI provider calls
+  api/commit-message/route.ts   # HTTP wrapper around lib/commit-message
   HomeClient.tsx                # main UI + folder modal
   page.tsx                      # SSR env defaults (no key exposure)
   layout.tsx
   globals.css
+lib/
+  commit-message.ts             # shared git + AI generation (app + CLI)
 scripts/
   open-here.ps1 / .cmd / .mjs   # open app with current folder
-  gitgen.cmd                    # PATH-friendly launcher
+  gitgen.cmd                    # PATH-friendly launcher (also `commit` / `commit push`)
+  commit.ts                     # `gitgen commit [push]` CLI
 start-dev.bat                   # start server + open browser
 .env.example                    # public template
 LICENSE                         # non-commercial

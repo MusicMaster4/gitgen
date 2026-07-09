@@ -1,7 +1,12 @@
 @echo off
-REM git-gen — abre o Git Command Generator com a pasta atual (cwd)
+REM git-gen — alias de gitgen (abre o app ou roda "commit"/"commit push")
 setlocal
 set "PORT=%GCG_PORT%"
 if "%PORT%"=="" set "PORT=2001"
+
+if /i "%~1"=="commit" (
+  bun "%~dp0commit.ts" %*
+  exit /b %errorlevel%
+)
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0open-here.ps1" -Port "%PORT%"

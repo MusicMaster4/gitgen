@@ -6,6 +6,8 @@
 #       .\open-here.ps1 -Port 2001
 
 param(
+  [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
+  [string[]]$Rest = @(),
   [string]$Port = $(if ($env:GCG_PORT) { $env:GCG_PORT } else { "2001" }),
   [int]$TimeoutSec = 90
 )
@@ -13,6 +15,18 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+# Subcomando CLI: "gitgen commit" / "gitgen commit push" — nao abre o browser,
+# roda o script bun que gera a mensagem, commita e (opcional) da push.
+if ($Rest.Count -ge 1 -and $Rest[0].ToLower() -eq "commit") {
+  $bun = Get-Command bun -ErrorAction SilentlyContinue
+  if (-not $bun) {
+    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar 'gitgen commit'."
+    exit 1
+  }
+  & bun (Join-Path $PSScriptRoot "commit.ts") @Rest
+  exit $LASTEXITCODE
+}
 $cwd = (Get-Location).Path
 $encoded = [uri]::EscapeDataString($cwd)
 $url = "http://localhost:$Port/?path=$encoded"
