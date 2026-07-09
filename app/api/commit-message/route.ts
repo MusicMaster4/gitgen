@@ -189,7 +189,7 @@ function openAiRequest(apiKey: string, model: string, language: string, context:
 
 async function readProviderError(res: Response, provider: Provider): Promise<string> {
   const text = await res.text().catch(() => "");
-  let detail = `${PROVIDER_LABEL[provider]} respondeu ${res.status}`;
+  let detail = `${PROVIDER_LABEL[provider]} responded with ${res.status}`;
   try {
     const j = JSON.parse(text) as { error?: { message?: string } };
     if (j?.error?.message) detail = j.error.message;
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Requisicao invalida" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
   const path = (body.path || "").trim();
@@ -222,11 +222,11 @@ export async function POST(req: NextRequest) {
   const language = body.language === "pt" ? "pt" : "en";
 
   if (!path) {
-    return NextResponse.json({ error: "Informe o caminho da pasta nas configuracoes" }, { status: 400 });
+    return NextResponse.json({ error: "Set the project folder path in settings" }, { status: 400 });
   }
   if (!apiKey) {
     return NextResponse.json(
-      { error: `Informe a API key da ${PROVIDER_LABEL[provider]} nas configuracoes` },
+      { error: `Set the ${PROVIDER_LABEL[provider]} API key in settings` },
       { status: 400 }
     );
   }
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
   const isRepo = (await git(path, ["rev-parse", "--is-inside-work-tree"])).trim();
   if (isRepo !== "true") {
     return NextResponse.json(
-      { error: "A pasta nao e um repositorio git (ou o caminho nao existe)" },
+      { error: "Folder is not a git repository (or path does not exist)" },
       { status: 422 }
     );
   }
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
   const context = buildContext(status, nameStatus, diff, untracked);
 
   if (!context.trim()) {
-    return NextResponse.json({ error: "Nenhuma mudanca detectada no repositorio" }, { status: 422 });
+    return NextResponse.json({ error: "No changes detected in the repository" }, { status: 422 });
   }
 
   try {
@@ -274,12 +274,12 @@ export async function POST(req: NextRequest) {
     const message = cleanMessage(extractResponseText(data));
 
     if (!message) {
-      return NextResponse.json({ error: "O modelo nao retornou uma mensagem" }, { status: 502 });
+      return NextResponse.json({ error: "Model did not return a message" }, { status: 502 });
     }
 
     return NextResponse.json({ message });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : `Falha ao contatar a ${PROVIDER_LABEL[provider]}`;
+    const msg = e instanceof Error ? e.message : `Failed to reach ${PROVIDER_LABEL[provider]}`;
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

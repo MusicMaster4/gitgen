@@ -18,7 +18,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: "Git Command Generator",
-  description: "Escreve, o comando aparece. Sem frescura.",
+  description: "Type it, copy it, done. Git workflows and AI commit messages.",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
-      lang="pt-BR"
+      lang="en"
       className={`${spaceMono.variable} ${dmSans.variable}`}
       suppressHydrationWarning
     >

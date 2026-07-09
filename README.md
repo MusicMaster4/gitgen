@@ -1,52 +1,131 @@
+<div align="center">
+
 # Git Command Generator
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=nextdotjs" alt="Next.js" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Bun-ready-fbf0df?style=flat-square&logo=bun&logoColor=black" alt="Bun" />
-  <img src="https://img.shields.io/badge/license-non--commercial-cf7a6b?style=flat-square&labelColor=101014" alt="Non-commercial license" />
+**Type it, copy it, done.**
+
+A local Next.js tool that builds ready-to-paste Git workflows — and generates Conventional Commit messages with AI from your real `git diff`.
+
+<p>
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=nextdotjs" alt="Next.js" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Tailwind-4-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind" />
+  <img src="https://img.shields.io/badge/Bun-ready-fbf0df?style=for-the-badge&logo=bun&logoColor=black" alt="Bun" />
 </p>
 
-<p align="center">
-  <b>Escreve, o comando aparece. Sem frescura.</b><br />
-  Gera fluxos Git prontos pra copiar — e mensagens de commit com IA a partir do diff real do repositório.
+<p>
+  <a href="#quick-start"><strong>Quick Start</strong></a> ·
+  <a href="#features"><strong>Features</strong></a> ·
+  <a href="#ai-commit-generation"><strong>AI Commits</strong></a> ·
+  <a href="#terminal-shortcut"><strong>gitgen</strong></a> ·
+  <a href="#security"><strong>Security</strong></a>
 </p>
+
+</div>
 
 ---
 
-## O que é
+## Why this exists
 
-Ferramenta local (Next.js) para montar e copiar comandos Git do dia a dia:
+Git is powerful. Remembering every flag and sequence is not.
 
-- linkar repo e fazer o primeiro push
-- criar branch, merge, stash, push e commit
-- checkout e restore (tudo ou um arquivo)
-- **gerar mensagem de commit com IA** (OpenRouter ou OpenAI) lendo o `git status` / diff da pasta que você indicar
+**Git Command Generator** gives you multi-step command blocks for everyday workflows — commit, push, branch, merge, stash, restore — in one click. Leave the commit message empty and AI reads your local diff to write a short Conventional Commit for you.
 
-Ideal pra quem quer ir rápido sem decorar cada variação de comando — e ainda sair com Conventional Commits decentes.
+No accounts. No cloud repo access. Just your machine, your folder, your terminal.
+
+---
 
 ## Features
 
-| Área | O que faz |
-|------|-----------|
-| **Fluxos prontos** | Scripts multi-linha com `git add`, `commit`, `push`, `checkout`, `merge`, etc. |
-| **IA de commit** | Lê o working tree local e devolve uma mensagem curta no formato Conventional Commits |
-| **Provedores** | OpenRouter **ou** OpenAI (chave no servidor ou na UI) |
-| **Idioma** | Mensagens em `en` ou `pt` |
-| **Persistência local** | Preferências no `localStorage` do browser |
-| **Cópia em 1 clique** | Cada card copia o bloco de comandos pro clipboard |
+<table>
+<tr>
+<td width="50%" valign="top">
 
-## Stack
+### Ready-made workflows
 
-- **Next.js 16** (App Router) + **React 19** + **TypeScript**
-- **Tailwind CSS 4**
-- API route Node (`/api/commit-message`) que executa `git` localmente e chama o provedor de IA
-- Runtime recomendado: **Bun** (também funciona com Node)
+Copy full command sequences for:
 
-## Início rápido
+- First push & remote setup
+- Commit + push
+- Commit only (no push)
+- Create branch
+- Merge into `main`
+- Save state & switch back
+- Checkout any branch
+- Restore all files or one file
 
-### 1. Clone e instale
+Each card shows live output as you type.
+
+</td>
+<td width="50%" valign="top">
+
+### AI commit messages
+
+- Reads `git status`, name-status, and diff from **your** project folder
+- OpenRouter **or** OpenAI (server key or UI)
+- Conventional Commits format (`feat:`, `fix:`, `chore:`, …)
+- English or Portuguese output
+- 12s in-memory cache — no duplicate API hits when clicking multiple cards
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Developer ergonomics
+
+- One-click copy on every card
+- Recent folders in `localStorage`
+- Folder picker modal on first launch
+- `gitgen` CLI opens the app with `?path=` from any repo
+- Collapsible sections, field validation, 30s message auto-clear
+
+</td>
+<td width="50%" valign="top">
+
+### Local-first
+
+- Runs on `localhost:2001`
+- API route executes `git` on your filesystem
+- Preferences stored in the browser
+- Keys stay in `.env.local` or localStorage — never in git
+
+</td>
+</tr>
+</table>
+
+---
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Your repo] -->|gitgen or modal| B[Git Command Generator]
+    B --> C{Empty commit message?}
+    C -->|No| D[Build command block]
+    C -->|Yes + API key| E[/api/commit-message]
+    E -->|git status + diff| F[Local git]
+    E -->|context| G[OpenRouter / OpenAI]
+    G -->|Conventional Commit| D
+    D --> H[Clipboard]
+```
+
+1. Point the app at your project folder.
+2. Make changes in your real repo.
+3. Click **Copy** on a workflow card.
+4. Paste into your terminal. Done.
+
+---
+
+## Quick start
+
+### Prerequisites
+
+- [Bun](https://bun.sh) (recommended) or Node 18+
+- Git installed and on your `PATH`
+
+### 1 · Clone & install
 
 ```bash
 git clone https://github.com/MusicMaster4/git-command-generator.git
@@ -54,19 +133,16 @@ cd git-command-generator
 bun install
 ```
 
-> Se preferir: `npm install` / `pnpm install` também servem.
-
-### 2. Configure o ambiente
+### 2 · Environment
 
 ```bash
 cp .env.example .env.local
 ```
 
-Edite `.env.local` (esse arquivo **nunca** deve ir pro git):
+Edit `.env.local` — **never commit this file**:
 
 ```env
-# openrouter | openai
-AI_PROVIDER=openrouter
+AI_PROVIDER=openrouter          # openrouter | openai
 
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=google/gemini-2.0-flash-001
@@ -74,125 +150,164 @@ OPENROUTER_MODEL=google/gemini-2.0-flash-001
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4-mini
 
-COMMIT_LANGUAGE=en
+COMMIT_LANGUAGE=en              # en | pt
 ```
 
-Você pode deixar as chaves vazias no `.env.local` e preencher só na interface — ou o contrário: chave só no servidor e UI sem digitar nada.
+| Variable | Description |
+|----------|-------------|
+| `AI_PROVIDER` | Default provider shown in the UI |
+| `OPENROUTER_*` / `OPENAI_*` | Server-side API keys & models |
+| `COMMIT_LANGUAGE` | Default language for AI commit messages |
 
-### 3. Rode
+> Keys can live in `.env.local` **or** be entered in the UI — or both. Server keys are preferred for local use.
+
+### 3 · Run
 
 ```bash
 bun run dev
 ```
 
-Abra [http://localhost:2001](http://localhost:2001) — ou use o `start-dev.bat` no Windows.
+Open **[http://localhost:2001](http://localhost:2001)** — or double-click `start-dev.bat` on Windows.
 
-Na primeira abertura (sem `?path=`), um **modal** pede a pasta do projeto: escolha uma **recente** ou **cole o caminho**.
+On first launch (without `?path=`), a modal asks for your project folder: pick a **recent** path or **paste** one.
 
-### Scripts úteis
+### Scripts
 
-| Comando | Descrição |
-|---------|-----------|
-| `bun run dev` | Dev server na porta **2001** |
-| `bun run build` | Build de produção |
-| `bun run start` | Serve o build (porta 2001) |
+| Command | What it does |
+|---------|--------------|
+| `bun run dev` | Dev server on port **2001** |
+| `bun run build` | Production build |
+| `bun run start` | Serve the build (port 2001) |
 | `bun run lint` | ESLint |
-| `bun run typecheck` | TypeScript sem emitir arquivos |
-| `bun run here` | Abre o app com a **pasta atual** (`?path=`) |
+| `bun run typecheck` | TypeScript check |
+| `bun run here` | Open app with **current directory** (`?path=`) |
 
-## Abrir na pasta em que você está (terminal)
+---
 
-No diretório do **seu** projeto:
+## Terminal shortcut
+
+From **any** project directory:
 
 ```bash
 gitgen
 ```
 
-O que o `gitgen` faz:
+| Server state | Behavior |
+|--------------|----------|
+| Already running on `localhost:2001` | Opens browser with `?path=` for current folder |
+| Offline | Starts `bun run dev` in background, waits, then opens browser |
 
-1. Se o server **já** estiver em `localhost:2001` → só abre o browser com `?path=` da pasta atual
-2. Se estiver **offline** → abre uma **nova janela CMD** com `bun run dev` no app, espera ficar pronto e abre o browser
-
-(Equivale a `scripts/open-here.ps1` / `open-here.mjs`. O `scripts/` precisa estar no PATH do usuário — veja instalação abaixo.)
-
-Instalar no PATH (Windows), uma vez:
+Equivalent to `scripts/open-here.ps1` / `open-here.mjs`. Add `scripts/` to your user `PATH` once:
 
 ```powershell
-# já feito se você configurou antes; senão adicione esta pasta ao Path do usuário:
+# Example (adjust to your clone path):
 # H:\Python\Slop\git-command-generator\scripts
 ```
 
-Porta customizada: `GCG_PORT` (padrão `2001`). Timeout da subida: `GCG_TIMEOUT` em segundos no `.mjs` / `-TimeoutSec` no `.ps1`.
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `GCG_PORT` | `2001` | Custom port |
+| `GCG_TIMEOUT` | varies | Startup wait (seconds) |
 
-## Como usar a geração de commit
+---
 
-1. Defina a pasta do projeto de um destes jeitos:
-   - **Terminal:** `gitgen` (recomendado)
-   - **Modal** ao abrir pelo `.bat` ou browser: pastas recentes ou colar o path
-   - **Config** → campo do caminho ou botão **Trocar**
-2. Escolha o provedor (OpenRouter / OpenAI) e o modelo.
-3. Garanta uma chave: no `.env.local` **ou** no campo da tela.
-4. Faça suas edições no repo de verdade.
-5. Em um card (push, commit, branch…), deixe a mensagem vazia e clique em copiar — a API gera a mensagem a partir do diff e monta o bloco de comandos.
+## AI commit generation
 
-Sem chave / sem pasta válida, os cards ainda copiam comandos com mensagens padrão.
+### Setup
 
-As pastas usadas ficam em **recentes** (`localStorage`) para o próximo modal.
+1. **Folder** — via `gitgen`, the startup modal, or **Settings → Change**
+2. **Provider & model** — OpenRouter or OpenAI
+3. **API key** — in `.env.local` and/or the UI
+4. **Language** — English or Portuguese for generated messages
 
-## Segurança (importante)
+### Usage
 
-| Arquivo / dado | Vai pro git? |
-|----------------|--------------|
-| `.env.local` (chaves reais) | **Não** — ignorado |
-| `.env.example` (placeholders) | Sim — template seguro |
-| Chaves digitadas na UI | Só no **localStorage** do browser |
-| `node_modules/`, `.next/`, logs, backups | **Não** |
+1. Edit files in your real repo.
+2. Open a card (Commit + Push, Create Branch, etc.).
+3. Leave the commit message **empty**.
+4. Click **Copy**.
 
-Regras do repositório:
+The API runs `git` locally, sends a compact diff to the model, and builds the full command block with the generated message.
 
-- Nunca commite `.env`, `.env.local` ou qualquer arquivo com `API_KEY` preenchida.
-- Não use `git add -f` em arquivos de ambiente.
-- Antes do primeiro push, confira:
+Without a key or valid folder, cards still copy commands using sensible default messages.
+
+Recent folders are saved in `localStorage` for the next session.
+
+---
+
+## Security
+
+> **Treat API keys like passwords.**
+
+| Item | Committed to git? |
+|------|-------------------|
+| `.env.local` (real keys) | **No** — gitignored |
+| `.env.example` (placeholders) | Yes — safe template |
+| Keys typed in the UI | Browser `localStorage` only |
+| `node_modules/`, `.next/`, logs | **No** |
+
+**Rules:**
+
+- Never commit `.env`, `.env.local`, or files with filled-in `API_KEY` values.
+- Do not `git add -f` environment files.
+- Before your first push, verify:
 
 ```bash
 git status
 git ls-files --others --exclude-standard
 ```
 
-A API usa a chave no **servidor** (Authorization Bearer nas chamadas OpenRouter/OpenAI). O front só envia a chave se você a digitou na UI; o ideal em uso local é deixar a chave só no `.env.local`.
-
-## Estrutura
-
-```text
-app/
-  api/commit-message/route.ts   # git + chamada à IA
-  HomeClient.tsx                # UI principal (+ modal de pasta / recentes)
-  page.tsx                      # SSR: defaults do env (sem expor chaves)
-  layout.tsx
-  globals.css
-scripts/
-  open-here.ps1 / .cmd / .mjs   # abre o app com a pasta atual (?path=)
-start-dev.bat                   # sobe o server e abre o browser (com modal)
-.env.example                    # template público
-LICENSE                         # uso livre, sem uso comercial
-```
-
-## Licença
-
-**Uso livre para fins pessoais, estudo e projetos sem fins lucrativos.**
-
-Não é permitido vender o app, partes do app, nem ganhar dinheiro com ele (SaaS pago, produto comercial, bundle pago, etc.) sem permissão escrita.
-
-Veja o arquivo [LICENSE](./LICENSE) para os termos completos (mesmo espírito da *Non-Commercial License* usada em outros projetos como o WaterDrop).
-
-Licenças comerciais ou exceções: contato com o autor.
-
-## Autor
-
-**Jubarte** · 2026
+The API uses server-side keys (`Authorization: Bearer` to OpenRouter/OpenAI). The frontend only sends a key if you typed one in the UI.
 
 ---
 
-<p align="center">
-  <sub>Feito pra ir rápido no terminal — e ainda commitar com mensagem de gente grande.</sub>
-</p>
+## Project structure
+
+```text
+app/
+  api/commit-message/route.ts   # git + AI provider calls
+  HomeClient.tsx                # main UI + folder modal
+  page.tsx                      # SSR env defaults (no key exposure)
+  layout.tsx
+  globals.css
+scripts/
+  open-here.ps1 / .cmd / .mjs   # open app with current folder
+  gitgen.cmd                    # PATH-friendly launcher
+start-dev.bat                   # start server + open browser
+.env.example                    # public template
+LICENSE                         # non-commercial
+```
+
+---
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 16 (App Router) |
+| UI | React 19, Tailwind CSS 4 |
+| Language | TypeScript 5 |
+| Runtime | Bun (Node-compatible) |
+| AI | OpenRouter Chat Completions / OpenAI Responses API |
+
+---
+
+## License
+
+**Free for personal use, learning, and non-commercial projects.**
+
+You may not sell the app, parts of it, or monetize it (paid SaaS, commercial product, paid bundle, etc.) without written permission.
+
+See [LICENSE](./LICENSE) for full terms (same spirit as the *Non-Commercial License* used in projects like WaterDrop).
+
+Commercial licenses or exceptions: contact the author.
+
+---
+
+<div align="center">
+
+**Jubarte** · 2026
+
+<sub>Built for speed in the terminal — with commit messages that don't embarrass you.</sub>
+
+</div>

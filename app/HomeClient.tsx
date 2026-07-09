@@ -45,7 +45,7 @@ interface CardState {
 }
 
 function CopyRow({
-  label = "Copiar",
+  label = "Copy",
   color,
   onClick,
   secondary,
@@ -66,10 +66,10 @@ function CopyRow({
         disabled={st === "gen"}
       >
         <CopyIcon />
-        {st === "gen" ? "Gerando…" : label}
+        {st === "gen" ? "Generating…" : label}
       </button>
-      {st === "gen" && <span className="gen-badge">gerando commit…</span>}
-      {st === "copied" && <span className="copied-badge visible" style={color ? { color } : undefined}>✓ copiado</span>}
+      {st === "gen" && <span className="gen-badge">generating commit…</span>}
+      {st === "copied" && <span className="copied-badge visible" style={color ? { color } : undefined}>✓ copied</span>}
       {st === "error" && <span className="gen-badge err">⚠ {state?.error}</span>}
     </div>
   );
@@ -397,14 +397,14 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
   /* ── command builders ── */
   const b = branch.trim() || "<branch>";
   const url = repo.trim() || "<repo_url>";
-  const file = restoreFile.trim() || "<arquivo>";
+  const file = restoreFile.trim() || "<file>";
 
   const buildLink = (m: string) =>
     [
       `git init`,
       `git remote add origin ${url}`,
       `git add .`,
-      `git commit -m "${m.trim() || "chore: commit inicial"}"`,
+      `git commit -m "${m.trim() || "chore: initial commit"}"`,
       `git branch -M main`,
       `git push -u origin main`,
     ].join("\n") + "\n";
@@ -413,27 +413,27 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
     [
       `git checkout -b ${b}`,
       `git add .`,
-      `git commit -m "${m.trim() || "feat: novo branch"}"`,
+      `git commit -m "${m.trim() || "feat: new branch"}"`,
       `git push -u origin ${b}`,
     ].join("\n") + "\n";
 
   const buildMerge = (m: string) =>
     [
       `git add .`,
-      `git commit -m "${m.trim() || `merge: integrando ${b} na main`}"`,
+      `git commit -m "${m.trim() || `merge: integrate ${b} into main`}"`,
       `git checkout main`,
       `git merge ${b}`,
       `git push`,
     ].join("\n") + "\n";
 
   const buildStash = (m: string) =>
-    [`git add .`, `git commit -m "${m.trim() || "wip: salvando progresso"}"`, `git checkout main`].join("\n") + "\n";
+    [`git add .`, `git commit -m "${m.trim() || "wip: saving progress"}"`, `git checkout main`].join("\n") + "\n";
 
   const buildPush = (m: string) =>
-    [`git add .`, `git commit -m "${m.trim() || "feat: atualização"}"`, `git push`].join("\n") + "\n";
+    [`git add .`, `git commit -m "${m.trim() || "feat: update"}"`, `git push`].join("\n") + "\n";
 
   const buildCommitOnly = (m: string) =>
-    [`git add .`, `git commit -m "${m.trim() || "feat: salvando progresso"}"`].join("\n") + "\n";
+    [`git add .`, `git commit -m "${m.trim() || "feat: save progress"}"`].join("\n") + "\n";
 
   const outCheckout = `git checkout ${b}\n`;
   const outRestoreAll = `git restore .\n`;
@@ -471,7 +471,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
       });
       const data = (await res.json()) as { message?: string; error?: string };
       if (!res.ok || !data.message) {
-        throw new Error(data.error || "Falha ao gerar mensagem");
+        throw new Error(data.error || "Failed to generate message");
       }
       genCache.current = { key, message: data.message, at: Date.now() };
       return data.message;
@@ -500,8 +500,8 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           msg = await generateMessage();
           setMsg(msg);
         } catch (e) {
-          const err = e instanceof Error ? e.message : "Falha ao gerar mensagem";
-          await copyToClipboard(build("")); // copia com mensagem padrão como fallback
+          const err = e instanceof Error ? e.message : "Failed to generate message";
+          await copyToClipboard(build("")); // fallback with default message
           setCard(id, { status: "error", error: err });
           return;
         }
@@ -547,35 +547,35 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           <br />
           GENERATOR
         </h1>
-        <p className="subtitle">Escreve, o comando aparece. Sem frescura.</p>
+        <p className="subtitle">Type it, copy it, done.</p>
         <div className="header-corner">v5.0 / AI</div>
       </header>
 
       {/* ── CONFIG ── */}
       <div className="section">
-        <div className="section-header" onClick={() => toggleSection("cfg")} title="Mostrar/esconder">
+        <div className="section-header" onClick={() => toggleSection("cfg")} title="Show/hide">
           <span className="section-label">
             <span className="dot dot-blue" />
-            Configuração
+            Settings
           </span>
           <span className="section-toggle">{toggleLabel("cfg")}</span>
         </div>
         <div className={`section-content single${sectionCollapsed("cfg") ? " collapsed" : ""}`}>
           <div className="card blue">
             <div className="card-header">
-              <span className="card-title">00 — Geração automática de commit</span>
-              <span className="card-sub">pasta + idioma → mensagem</span>
+              <span className="card-title">00 — Automatic commit generation</span>
+              <span className="card-sub">folder + language → message</span>
             </div>
             <div className="card-body" style={{ gridTemplateColumns: "1fr" }}>
               <div>
                 <div className="config-grid config-grid-folder">
                   <div>
-                    <label htmlFor="folderPath">Caminho da pasta do projeto</label>
+                    <label htmlFor="folderPath">Project folder path</label>
                     <div className="folder-path-row">
                       <input
                         id="folderPath"
                         type="text"
-                        placeholder="ex.: H:\\Meus Projetos\\app"
+                        placeholder="e.g. H:\\Projects\\my-app"
                         autoComplete="off"
                         spellCheck={false}
                         value={settings.folderPath}
@@ -586,11 +586,11 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                         }}
                       />
                       <button type="button" className="btn-folder-pick" onClick={openFolderModal}>
-                        Trocar
+                        Change
                       </button>
                     </div>
                     {recents.length > 0 && (
-                      <div className="recent-inline" aria-label="Pastas recentes">
+                      <div className="recent-inline" aria-label="Recent folders">
                         {recents.slice(0, 4).map((p) => (
                           <button
                             key={p}
@@ -606,7 +606,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                     )}
                   </div>
                   <div>
-                    <label htmlFor="language">Idioma do commit</label>
+                    <label htmlFor="language">Commit language</label>
                     <select
                       id="language"
                       className="select-field"
@@ -621,15 +621,15 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                 <p className="config-status">
                   {canGenerate ? (
                     <>
-                      Geração <b>ativa</b> — ao copiar um commit com a mensagem vazia, ela é gerada a partir do{" "}
-                      <code>git diff</code> da pasta.
+                      Generation <b>active</b> — when you copy a commit with an empty message, it is generated from the
+                      folder&apos;s <code>git diff</code>.
                     </>
                   ) : settings.folderPath.trim() ? (
-                    <span className="off">Pasta definida — falta chave da API para gerar mensagens com IA.</span>
+                    <span className="off">Folder set — add an API key to generate messages with AI.</span>
                   ) : (
                     <span className="off">
-                      Sem pasta: o app ainda copia comandos com mensagens manuais. Para IA, escolha uma pasta (modal) ou
-                      abra com <code>gitgen</code> no terminal do projeto.
+                      No folder: the app still copies commands with manual messages. For AI, pick a folder (modal) or
+                      launch with <code>gitgen</code> from your project terminal.
                     </span>
                   )}
                 </p>
@@ -641,7 +641,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
       {/* ── COMMITS ── */}
       <div className="section">
-        <div className="section-header" onClick={() => toggleSection("s3")} title="Mostrar/esconder">
+        <div className="section-header" onClick={() => toggleSection("s3")} title="Show/hide">
           <span className="section-label">
             <span className="dot dot-green" />
             Commits
@@ -659,12 +659,12 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
             <div className="card-body">
               <div>
                 <label htmlFor="pushMsg">
-                  Mensagem do commit {canGenerate && <span className="label-hint">(vazio = IA gera)</span>}
+                  Commit message {canGenerate && <span className="label-hint">(empty = AI generates)</span>}
                 </label>
                 <input
                   id="pushMsg"
                   type="text"
-                  placeholder={canGenerate ? "deixe vazio para gerar com IA" : "<mensagem>"}
+                  placeholder={canGenerate ? "leave empty for AI generation" : "<message>"}
                   autoComplete="off"
                   spellCheck={false}
                   value={pushMsg}
@@ -674,7 +674,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Saída</label>
+                  <label>Output</label>
                 </div>
                 <textarea rows={6} spellCheck={false} readOnly value={buildPush(pushMsg)} />
               </div>
@@ -685,18 +685,18 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           <div className={cardClass("commitOnly")}>
             {cardCountdownBar("commitOnly")}
             <div className="card-header">
-              <span className="card-title">02 — Só Commit (sem push)</span>
+              <span className="card-title">02 — Commit Only (no push)</span>
               <span className="card-sub">git add . → commit</span>
             </div>
             <div className="card-body">
               <div>
                 <label htmlFor="commitOnlyMsg">
-                  Mensagem do commit {canGenerate && <span className="label-hint">(vazio = IA gera)</span>}
+                  Commit message {canGenerate && <span className="label-hint">(empty = AI generates)</span>}
                 </label>
                 <input
                   id="commitOnlyMsg"
                   type="text"
-                  placeholder={canGenerate ? "deixe vazio para gerar com IA" : "<mensagem>"}
+                  placeholder={canGenerate ? "leave empty for AI generation" : "<message>"}
                   autoComplete="off"
                   spellCheck={false}
                   value={commitOnlyMsg}
@@ -709,7 +709,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Saída</label>
+                  <label>Output</label>
                 </div>
                 <textarea rows={5} spellCheck={false} readOnly value={buildCommitOnly(commitOnlyMsg)} />
               </div>
@@ -720,7 +720,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
       {/* ── BRANCHES ── */}
       <div className="section">
-        <div className="section-header" onClick={() => toggleSection("s2")} title="Mostrar/esconder">
+        <div className="section-header" onClick={() => toggleSection("s2")} title="Show/hide">
           <span className="section-label">
             <span className="dot dot-green" />
             Branches
@@ -732,14 +732,14 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           <div className={cardClass("branch")}>
             {cardCountdownBar("branch")}
             <div className="card-header">
-              <span className="card-title">03 — Criar Branch</span>
-              <span className="card-sub">checkout -b → desenvolver → commit → push</span>
+              <span className="card-title">03 — Create Branch</span>
+              <span className="card-sub">checkout -b → develop → commit → push</span>
             </div>
             <div className="card-body">
               <div>
                 <div className="input-stack">
                   <div>
-                    <label htmlFor="branch">Nome do branch</label>
+                    <label htmlFor="branch">Branch name</label>
                     <input
                       id="branch"
                       className={fieldErrors.branch ? "input-error" : ""}
@@ -754,18 +754,18 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       }}
                     />
                     <span className={`field-error-msg${fieldErrors.branch ? " visible" : ""}`}>
-                      ⚠ Nome do branch obrigatório
+                      ⚠ Branch name required
                     </span>
                   </div>
                   <div>
                     <label htmlFor="branchMsg">
-                      Mensagem do commit{" "}
-                      <span className="label-hint">{canGenerate ? "(vazio = IA gera)" : "(opcional)"}</span>
+                      Commit message{" "}
+                      <span className="label-hint">{canGenerate ? "(empty = AI generates)" : "(optional)"}</span>
                     </label>
                     <input
                       id="branchMsg"
                       type="text"
-                      placeholder={canGenerate ? "deixe vazio para gerar com IA" : "ex.: feat: initial commit"}
+                      placeholder={canGenerate ? "leave empty for AI generation" : "e.g. feat: initial commit"}
                       autoComplete="off"
                       spellCheck={false}
                       value={branchMsg}
@@ -775,7 +775,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                 </div>
                 <CopyRow
                   state={cardState.branch}
-                  label="Copiar tudo"
+                  label="Copy all"
                   onClick={() => {
                     if (!branch.trim()) {
                       flashField("branch");
@@ -787,7 +787,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Sequência completa</label>
+                  <label>Full sequence</label>
                 </div>
                 <textarea rows={6} spellCheck={false} readOnly value={buildBranch(branchMsg)} />
               </div>
@@ -798,14 +798,14 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           <div className={cardClass("merge", "warning")}>
             {cardCountdownBar("merge")}
             <div className="card-header">
-              <span className="card-title">04 — Merge com Main</span>
+              <span className="card-title">04 — Merge into Main</span>
               <span className="card-sub">commit → checkout main → merge → push</span>
             </div>
             <div className="card-body">
               <div>
                 <div className="input-stack">
                   <div>
-                    <label htmlFor="mergeBranch">Seu branch atual</label>
+                    <label htmlFor="mergeBranch">Your current branch</label>
                     <input
                       id="mergeBranch"
                       className={fieldErrors.mergeBranch ? "input-error" : ""}
@@ -820,18 +820,18 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       }}
                     />
                     <span className={`field-error-msg${fieldErrors.mergeBranch ? " visible" : ""}`}>
-                      ⚠ Nome do branch obrigatório
+                      ⚠ Branch name required
                     </span>
                   </div>
                   <div>
                     <label htmlFor="mergeMsg">
-                      Mensagem do commit{" "}
-                      <span className="label-hint">{canGenerate ? "(vazio = IA gera)" : "(opcional)"}</span>
+                      Commit message{" "}
+                      <span className="label-hint">{canGenerate ? "(empty = AI generates)" : "(optional)"}</span>
                     </label>
                     <input
                       id="mergeMsg"
                       type="text"
-                      placeholder={canGenerate ? "deixe vazio para gerar com IA" : "ex.: feat: finaliza login"}
+                      placeholder={canGenerate ? "leave empty for AI generation" : "e.g. feat: finish login"}
                       autoComplete="off"
                       spellCheck={false}
                       value={mergeMsg}
@@ -841,7 +841,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                 </div>
                 <CopyRow
                   state={cardState.merge}
-                  label="Copiar tudo"
+                  label="Copy all"
                   color="var(--orange)"
                   onClick={() => {
                     if (!branch.trim()) {
@@ -854,11 +854,11 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Sequência completa</label>
+                  <label>Full sequence</label>
                 </div>
                 <textarea rows={6} spellCheck={false} readOnly value={buildMerge(mergeMsg)} />
                 <div className="helper-block">
-                  <label>Não sabe o nome do branch? Rode isso primeiro:</label>
+                  <label>Not sure of the branch name? Run this first:</label>
                   <div className="static-cmd">
                     <code>git branch --show-current</code>
                     <button
@@ -866,12 +866,12 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       onClick={() => copySimple("showBranch", "git branch --show-current")}
                     >
                       <CopyIcon />
-                      Copiar
+                      Copy
                     </button>
                   </div>
                   {cardState.showBranch?.status === "copied" && (
                     <span className="copied-badge visible" style={{ display: "block", marginTop: 6 }}>
-                      ✓ copiado
+                      ✓ copied
                     </span>
                   )}
                 </div>
@@ -882,32 +882,32 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           {/* Salvar Estado e Voltar ao Main (sem IA) */}
           <div className="card warning">
             <div className="card-header">
-              <span className="card-title">05 — Salvar Estado e Voltar ao Main</span>
+              <span className="card-title">05 — Save State and Return to Main</span>
               <span className="card-sub">add → commit → checkout main</span>
             </div>
             <div className="card-body">
               <div>
                 <label htmlFor="stashMsg">
-                  Mensagem do commit <span className="label-hint">(opcional)</span>
+                  Commit message <span className="label-hint">(optional)</span>
                 </label>
                 <input
                   id="stashMsg"
                   type="text"
-                  placeholder="ex.: wip: pausando login"
+                  placeholder="e.g. wip: pausing login"
                   autoComplete="off"
                   spellCheck={false}
                   value={stashMsg}
                   onChange={(e) => setStashMsg(e.target.value)}
                 />
                 <p className="body-note">
-                  Faz um commit no branch atual salvando o estado, depois volta pro <code>main</code>. Para retomar,
-                  basta dar <code>git checkout &lt;branch&gt;</code> de novo.
+                  Commits on the current branch to save state, then switches back to <code>main</code>. To resume,
+                  run <code>git checkout &lt;branch&gt;</code> again.
                 </p>
-                <CopyRow state={cardState.stash} label="Copiar tudo" color="var(--orange)" onClick={() => copySimple("stash", buildStash(stashMsg))} />
+                <CopyRow state={cardState.stash} label="Copy all" color="var(--orange)" onClick={() => copySimple("stash", buildStash(stashMsg))} />
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Sequência completa</label>
+                  <label>Full sequence</label>
                 </div>
                 <textarea rows={6} spellCheck={false} readOnly value={buildStash(stashMsg)} />
               </div>
@@ -917,12 +917,12 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           {/* Mudar de Branch */}
           <div className="card warning">
             <div className="card-header">
-              <span className="card-title">06 — Mudar de Branch</span>
+              <span className="card-title">06 — Switch Branch</span>
               <span className="card-sub">git checkout &lt;branch&gt;</span>
             </div>
             <div className="card-body">
               <div>
-                <label htmlFor="checkoutBranch">Nome do branch de destino</label>
+                <label htmlFor="checkoutBranch">Target branch name</label>
                 <input
                   id="checkoutBranch"
                   type="text"
@@ -933,14 +933,13 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                   onChange={(e) => onBranchChange(e.target.value)}
                 />
                 <p className="body-note">
-                  Muda para qualquer branch existente. Use também para retomar um branch onde você salvou o estado
-                  anteriormente.
+                  Switch to any existing branch. Also use this to resume a branch where you previously saved state.
                 </p>
                 <CopyRow state={cardState.checkout} color="var(--orange)" onClick={() => copySimple("checkout", outCheckout)} />
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Saída</label>
+                  <label>Output</label>
                 </div>
                 <textarea rows={3} spellCheck={false} readOnly value={outCheckout} />
               </div>
@@ -951,10 +950,10 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
       {/* ── CONFIGURAR REPOSITÓRIO ── */}
       <div className="section">
-        <div className="section-header" onClick={() => toggleSection("s1")} title="Mostrar/esconder">
+        <div className="section-header" onClick={() => toggleSection("s1")} title="Show/hide">
           <span className="section-label">
             <span className="dot dot-blue" />
-            Configurar Repositório
+            Repository Setup
           </span>
           <span className="section-toggle">{toggleLabel("s1")}</span>
         </div>
@@ -962,14 +961,14 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           {/* Adicionar Remote (sem IA) */}
           <div className="card blue">
             <div className="card-header">
-              <span className="card-title">07 — Adicionar Remote (origin)</span>
-              <span className="card-sub">git init → remote add → primeiro push</span>
+              <span className="card-title">07 — Add Remote (origin)</span>
+              <span className="card-sub">git init → remote add → first push</span>
             </div>
             <div className="card-body">
               <div>
                 <div className="input-stack">
                   <div>
-                    <label htmlFor="repo">URL do repositório</label>
+                    <label htmlFor="repo">Repository URL</label>
                     <input
                       id="repo"
                       className={fieldErrors.repo ? "input-error" : ""}
@@ -984,17 +983,17 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       }}
                     />
                     <span className={`field-error-msg${fieldErrors.repo ? " visible" : ""}`}>
-                      ⚠ URL obrigatória para copiar
+                      ⚠ URL required to copy
                     </span>
                   </div>
                   <div>
                     <label htmlFor="linkMsg">
-                      Mensagem do commit <span className="label-hint">(opcional)</span>
+                      Commit message <span className="label-hint">(optional)</span>
                     </label>
                     <input
                       id="linkMsg"
                       type="text"
-                      placeholder="ex.: chore: commit inicial"
+                      placeholder="e.g. chore: initial commit"
                       autoComplete="off"
                       spellCheck={false}
                       value={linkMsg}
@@ -1004,7 +1003,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                 </div>
                 <CopyRow
                   state={cardState.link}
-                  label="Copiar tudo"
+                  label="Copy all"
                   color="var(--blue)"
                   onClick={() => {
                     if (!repo.trim()) {
@@ -1017,7 +1016,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Sequência completa</label>
+                  <label>Full sequence</label>
                 </div>
                 <textarea rows={6} spellCheck={false} readOnly value={buildLink(linkMsg)} />
               </div>
@@ -1028,10 +1027,10 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
       {/* ── DESFAZER MUDANÇAS ── */}
       <div className="section">
-        <div className="section-header" onClick={() => toggleSection("s4")} title="Mostrar/esconder">
+        <div className="section-header" onClick={() => toggleSection("s4")} title="Show/hide">
           <span className="section-label">
             <span className="dot dot-red" />
-            Desfazer Mudanças
+            Undo Changes
           </span>
           <span className="section-toggle">{toggleLabel("s4")}</span>
         </div>
@@ -1039,23 +1038,23 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           {/* Restaurar Todos */}
           <div className="card danger">
             <div className="card-header">
-              <span className="card-title">08 — Restaurar Todos os Arquivos</span>
+              <span className="card-title">08 — Restore All Files</span>
               <span className="card-sub">git restore .</span>
             </div>
             <div className="card-body">
               <div>
                 <div className="warn-banner">
                   <span className="warn-icon">⚠</span>
-                  Destrutivo — descarta TODAS as mudanças não commitadas. Não tem desfazer.
+                  Destructive — discards ALL uncommitted changes. Cannot be undone.
                 </div>
                 <p className="card-desc" suppressHydrationWarning>
-                  Restaura todos os arquivos rastreados ao estado do último commit.
+                  Restores all tracked files to the state of the last commit.
                 </p>
                 <CopyRow state={cardState.restoreAll} color="var(--red)" onClick={() => copySimple("restoreAll", outRestoreAll)} />
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Saída</label>
+                  <label>Output</label>
                 </div>
                 <textarea rows={3} spellCheck={false} readOnly value={outRestoreAll} />
               </div>
@@ -1065,21 +1064,21 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           {/* Restaurar Arquivo */}
           <div className="card danger">
             <div className="card-header">
-              <span className="card-title">09 — Restaurar Arquivo Específico</span>
-              <span className="card-sub">git restore &lt;arquivo&gt;</span>
+              <span className="card-title">09 — Restore Specific File</span>
+              <span className="card-sub">git restore &lt;file&gt;</span>
             </div>
             <div className="card-body">
               <div>
                 <div className="warn-banner">
                   <span className="warn-icon">⚠</span>
-                  Destrutivo — descarta as mudanças do arquivo indicado. Não tem desfazer.
+                  Destructive — discards changes to the specified file. Cannot be undone.
                 </div>
-                <label htmlFor="restoreFile">Caminho do arquivo</label>
+                <label htmlFor="restoreFile">File path</label>
                 <input
                   id="restoreFile"
                   className={fieldErrors.restoreFile ? "input-error" : ""}
                   type="text"
-                  placeholder="<arquivo>  ex.: src/index.js"
+                  placeholder="<file>  e.g. src/index.js"
                   autoComplete="off"
                   spellCheck={false}
                   value={restoreFile}
@@ -1089,7 +1088,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                   }}
                 />
                 <span className={`field-error-msg${fieldErrors.restoreFile ? " visible" : ""}`}>
-                  ⚠ Caminho do arquivo obrigatório
+                  ⚠ File path required
                 </span>
                 <CopyRow
                   state={cardState.restoreFile}
@@ -1105,7 +1104,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
               </div>
               <div>
                 <div className="out-label-row">
-                  <label>Saída</label>
+                  <label>Output</label>
                 </div>
                 <textarea rows={3} spellCheck={false} readOnly value={outRestoreFile} />
               </div>
@@ -1126,20 +1125,20 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
           }}
         >
           <div className="folder-modal">
-            <div className="folder-modal-tag">{"// projeto local"}</div>
+            <div className="folder-modal-tag">{"// local project"}</div>
             <h2 id="folder-modal-title">
-              Qual pasta <span>você está</span>
+              Which folder are <span>you</span>
               <br />
-              trabalhando?
+              working in?
             </h2>
             <p className="folder-modal-sub">
-              Abriu pelo <code>.bat</code> ou direto no browser — escolha uma recente ou cole o caminho. Pelo terminal
-              com <code>gitgen</code>, a pasta já vem preenchida.
+              Opened via <code>.bat</code> or directly in the browser — pick a recent folder or paste the path. From the
+              terminal with <code>gitgen</code>, the folder is filled in automatically.
             </p>
 
             {recents.length > 0 && (
               <div className="folder-modal-section">
-                <span className="folder-modal-label">Pastas recentes</span>
+                <span className="folder-modal-label">Recent folders</span>
                 <ul className="folder-recent-list">
                   {recents.map((p) => (
                     <li key={p}>
@@ -1150,7 +1149,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                       <button
                         type="button"
                         className="folder-recent-remove"
-                        aria-label={`Remover ${folderBasename(p)} dos recentes`}
+                        aria-label={`Remove ${folderBasename(p)} from recents`}
                         onClick={() => removeRecent(p)}
                       >
                         ×
@@ -1163,13 +1162,13 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
             <div className="folder-modal-section">
               <label className="folder-modal-label" htmlFor="modalFolderPath">
-                {recents.length > 0 ? "Ou cole um caminho novo" : "Cole o caminho da pasta do projeto"}
+                {recents.length > 0 ? "Or paste a new path" : "Paste your project folder path"}
               </label>
               <input
                 id="modalFolderPath"
                 type="text"
                 className={modalError ? "input-error" : ""}
-                placeholder="ex.: H:\Python\meu-app"
+                placeholder="e.g. H:\Projects\my-app"
                 autoComplete="off"
                 spellCheck={false}
                 autoFocus
@@ -1185,7 +1184,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                   }
                 }}
               />
-              {modalError && <span className="field-error-msg visible">⚠ Cole um caminho válido da pasta</span>}
+              {modalError && <span className="field-error-msg visible">⚠ Paste a valid folder path</span>}
             </div>
 
             <div className="folder-modal-actions">
@@ -1196,10 +1195,10 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
                   if (!applyFolderPath(modalDraft)) setModalError(true);
                 }}
               >
-                Usar esta pasta
+                Use this folder
               </button>
               <button type="button" className="btn-copy secondary" onClick={skipFolder}>
-                Continuar sem pasta
+                Continue without folder
               </button>
             </div>
           </div>
