@@ -8,7 +8,12 @@
     "start": "next start -p 2001",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "here": "bun scripts/open-here.mjs"
+    "here": "bun scripts/open-here.mjs",
+    "cli": "bun scripts/cli.ts",
+    "version:show": "bun scripts/cli.ts version",
+    "version:patch": "bun scripts/bump-version.ts patch",
+    "version:minor": "bun scripts/bump-version.ts minor",
+    "version:major": "bun scripts/bump-version.ts major"
   },
   "dependencies": {
     "next": "16.2.10",

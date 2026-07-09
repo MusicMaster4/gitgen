@@ -17,9 +17,11 @@
  *   switch <branch>      sw <branch>  checkout <branch>
  *   remote <url>         r <url>      init -> remote add origin -> first push
  *   restore [file]       rs [file]    git restore . (or one file) — destructive
+ *   version              v            print CLI / package version
  *   help                 h            show this list (also the default with no args)
  *
  * Flags: -m / --message "msg" · -y / --yes (skip restore confirm)
+ * Also: --version / -v / -V (same as version)
  */
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -35,6 +37,7 @@ import {
   type Provider,
   generateCommitMessage,
 } from "../lib/commit-message";
+import { APP_NAME, CLI_NAME, getVersion } from "../lib/version";
 
 const pexec = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -285,6 +288,7 @@ const SHORT_CMDS: Record<string, string> = {
   sw: "switch",
   r: "remote",
   rs: "restore",
+  v: "version",
   h: "help",
 };
 
@@ -334,6 +338,7 @@ async function openApp(): Promise<void> {
 }
 
 const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
+  ${CLI_NAME} ${getVersion()}  (${APP_NAME})
 
   Long                    Short              Action
   ──────────────────────  ─────────────────  ────────────────────────────────────
@@ -345,6 +350,7 @@ const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
   switch <branch>         sw <branch>        checkout <branch>
   remote <url> [-m msg]   r <url> [-m msg]   git init -> remote add origin -> first push
   restore [file] [-y]     rs [file] [-y]     discard changes (all, or one file)
+  version                 v / -v / --version print installed version (from package.json)
   help                    h                  show this list (default if no command)
 
   Examples:
@@ -355,6 +361,7 @@ const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
     gg m feature/login   gitgen merge feature/login
     gg s                 gitgen save
     gg sw main           gitgen switch main
+    gg v                 gitgen version
 
 AI: ${PROVIDER_LABEL[provider]} (${model})${apiKey ? "" : " — no API key set, defaults used"}`;
 
@@ -365,6 +372,14 @@ async function main() {
     case "-h":
     case "--help":
       log(HELP);
+      return;
+
+    case "version":
+    case "--version":
+    case "-v": // also matches -V after argv lowercasing
+      // Machine-friendly first line; details after for humans.
+      log(`${CLI_NAME} ${getVersion()}`);
+      log(`${APP_NAME} (package.json)`);
       return;
 
     case "start": {

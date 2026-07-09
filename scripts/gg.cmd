@@ -14,6 +14,7 @@ REM   gg s          save & return to main
 REM   gg sw <name>  switch branch
 REM   gg r <url>    add remote + first push
 REM   gg rs [file]  restore (destructive)
+REM   gg v          version
 REM   gg h          help
 setlocal
 set "GCG_TTY=1"

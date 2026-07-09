@@ -18,7 +18,7 @@ A local Next.js tool that builds ready-to-paste Git workflows — and generates 
   <a href="#quick-start"><strong>Quick Start</strong></a> ·
   <a href="#features"><strong>Features</strong></a> ·
   <a href="#ai-commit-generation"><strong>AI Commits</strong></a> ·
-  <a href="#terminal-shortcut"><strong>gitgen</strong></a> ·
+  <a href="#cli"><strong>CLI (`gg`)</strong></a> ·
   <a href="#security"><strong>Security</strong></a>
 </p>
 
@@ -78,7 +78,8 @@ Each card shows live output as you type.
 - One-click copy on every card
 - Recent folders in `localStorage`
 - Folder picker modal on first launch
-- `gitgen start` / `gg start` opens the app with `?path=` from any repo
+- Terminal CLI: `gg` / `gitgen` — short commands (`gg c p`, `gg b …`) or long forms
+- `gg start` opens the app with `?path=` from any repo
 - Collapsible sections, field validation, 30s message auto-clear
 
 </td>
@@ -181,90 +182,136 @@ On first launch (without `?path=`), a modal asks for your project folder: pick a
 | `bun run lint` | ESLint |
 | `bun run typecheck` | TypeScript check |
 | `bun run here` | Open app with **current directory** (`?path=`) |
+| `gg start` / `gitgen start` | Same idea from PATH — see [CLI](#cli) |
 
 ---
 
-## Terminal shortcut
+## CLI
 
-From **any** project directory:
+Run Git Command Generator from **any** project folder via **`gg`**, **`gitgen`**, or **`git-gen`**. Three equivalent launchers live in `scripts/`:
+
+| Launcher | Notes |
+|----------|--------|
+| `gg` | Short name (recommended) |
+| `gitgen` | Full name |
+| `git-gen` | Hyphenated alias |
+
+Bare `gg` / `gitgen` (no arguments) prints **help** — it does **not** open the app.
+
+### Install on PATH (once)
+
+Add the repo’s `scripts/` directory to your user `PATH`, then open a **new** terminal:
+
+```powershell
+# Windows (PowerShell) — adjust the clone path:
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  $env:Path + ";H:\Python\Slop\git-command-generator\scripts",
+  "User"
+)
+```
+
+Without PATH, you can still run:
 
 ```bash
-gitgen start
-# or: gg start
+bun /path/to/git-command-generator/scripts/cli.ts <cmd> [args]
+```
+
+Requires [Bun](https://bun.sh) on your `PATH`.
+
+### Open the web app
+
+```bash
+gg start
+# same as: gitgen start
 ```
 
 | Server state | Behavior |
 |--------------|----------|
-| Already running on `localhost:2001` | Opens browser with `?path=` for current folder |
-| Offline | Starts `bun run dev` in background, waits, then opens browser |
+| Already running on `localhost:2001` | Opens the browser with `?path=` for the current folder |
+| Offline | Starts `bun run dev` in the background, waits, then opens the browser |
 
-Bare `gitgen` / `gg` (no arguments) prints the command list — it does **not** open the app.
+Uses `scripts/open-here.ps1` (Windows) or `open-here.mjs` under the hood.
 
-### CLI — run any workflow in the terminal
+### Workflows in the terminal
 
-Every card from the app also works as a CLI command — **no browser, no server**. The commands
-run git directly in your current folder and reuse the same AI message generator (`lib/commit-message.ts`).
+Every app card also works as a CLI command — **no browser, no server**. Commands run `git` in the current folder and reuse the same AI message generator (`lib/commit-message.ts`).
 
-**Launchers** (add `scripts/` to your `PATH` once): `gg`, `gitgen`, and `git-gen` are equivalent.
-
-**Short commands** (recommended) and long forms both work:
+**Short commands** (recommended) and long forms both work on `gg` and `gitgen`:
 
 ```bash
 gg start                   # open the web app with current folder
-gg c                       # commit only          (= gitgen commit)
-gg c p                     # commit + push        (= gitgen commit push)
-gg b feature/x             # create branch        (= gitgen branch feature/x)
-gg m feature/x             # merge into main      (= gitgen merge feature/x)
-gg m feature/x dev         # merge into dev
-gg s                       # save & return main   (= gitgen save)
-gg sw main                 # switch branch        (= gitgen switch main)
-gg r <url>                 # add remote + push    (= gitgen remote <url>)
-gg rs                      # restore all          (= gitgen restore)
+gg c                       # commit only
+gg c p                     # commit + push
+gg b feature/x             # create branch → add → commit → push -u
+gg m feature/x             # merge feature/x into main
+gg m feature/x dev         # merge feature/x into dev
+gg s                       # commit work, then checkout main
+gg sw main                 # switch branch
+gg r <url>                 # init + remote + first push (main)
+gg rs                      # restore all uncommitted changes (confirms)
 gg rs src/x.ts             # restore one file
-gg h                       # help                 (= gitgen help)
+gg v                       # print version
+gg h                       # help
 ```
 
 | Short | Long | App card | What it does |
 |-------|------|----------|--------------|
-| `gg start` | `gitgen start` | — | Open the web app with the current folder (`?path=`) |
+| `gg start` | `gitgen start` | — | Open the web app with the current folder |
 | `gg c` | `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
-| `gg c p` | `gitgen commit push` | 01 Commit + Push | …then `git push` |
+| `gg c p` | `gitgen commit push` | 01 Commit + Push | …then `git push` (`p` = short for `push`) |
 | `gg b <name>` | `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
 | `gg m <src> [dst]` | `gitgen merge <src> [dst]` | 04 Merge into Main | commit → `checkout <dst or main>` → `merge <src>` → push |
 | `gg s` | `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
 | `gg sw <branch>` | `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
 | `gg r <url>` | `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
 | `gg rs [file]` | `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
-| `gg h` | `gitgen help` | — | Show all commands |
+| `gg v` | `gitgen version` | — | Print installed version (`package.json`; also `--version` / `-V`) |
+| `gg h` | `gitgen help` | — | Show all commands (same as bare `gg`) |
 
-**Commit messages:** any command that commits takes an optional `-m "message"`. Omit it and, if an API
-key is set, the message is generated from your diff (same as the app); with no key it falls back to a
-sensible default (`feat: update`, `wip: saving progress`, …).
+### Versioning
 
-**Live progress:** each step shows a spinner with elapsed time and a `✓`/`✗` on completion. Pushes render a
-**real progress bar** from git's own transfer stats, so you can watch the upload advance instead of waiting blind:
+The CLI version is **`package.json` → `version`** (single source of truth via `lib/version.ts`).
+
+```bash
+gitgen version          # or: gg v  ·  gitgen --version  ·  bun run version:show
+```
+
+To release (updates `package.json` and prepends `CHANGELOG.md`):
+
+```bash
+bun run version:patch   # 1.0.0 → 1.0.1
+bun run version:minor   # 1.0.0 → 1.1.0
+bun run version:major   # 1.0.0 → 2.0.0
+# optional note:
+bun scripts/bump-version.ts patch "fix restore confirm on Windows"
+```
+
+### Flags, AI messages, progress
+
+| Flag | Applies to | Effect |
+|------|------------|--------|
+| `-m "msg"` / `--message` | any command that commits | Use this commit message instead of AI/default |
+| `-y` / `--yes` | `restore` / `rs` | Skip the destructive confirmation prompt |
+
+- **AI messages:** omit `-m` and, if an API key is set in `.env.local`, the message is generated from your diff (same as the app). Without a key, a sensible default is used (`feat: update`, `wip: saving progress`, …).
+- **Provider env:** `AI_PROVIDER`, matching `*_API_KEY` / `*_MODEL`, and `COMMIT_LANGUAGE` from `.env.local`.
+- **Live progress:** each step shows a spinner with elapsed time and `✓`/`✗`. Pushes render a real progress bar from git’s transfer stats:
 
 ```text
   ⠹ git push  [██████████████░░░░░░░░]  63% Writing objects  2.3s
   ✓ git push  4.1s
 ```
 
-**Flags:** `-m "msg"` sets the commit message · `-y` / `--yes` skips the `restore` confirmation.
-
-Runs entirely locally via `scripts/cli.ts` (Bun). Uses `AI_PROVIDER`, the matching `*_API_KEY` / `*_MODEL`,
-and `COMMIT_LANGUAGE` from `.env.local`.
-
-Equivalent to `scripts/open-here.ps1` / `open-here.mjs`. Add `scripts/` to your user `PATH` once:
-
-```powershell
-# Example (adjust to your clone path):
-# H:\Python\Slop\git-command-generator\scripts
-```
+### CLI env vars
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `GCG_PORT` | `2001` | Custom port |
-| `GCG_TIMEOUT` | varies | Startup wait (seconds) |
+| `GCG_PORT` | `2001` | Dev server port when using `gg start` |
+| `GCG_TIMEOUT` | varies | How long to wait for the server to come up (seconds) |
+| `GCG_TTY` | — | Set by launchers so spinners work under PowerShell/cmd |
+
+Implementation: `scripts/cli.ts` (Bun). Launchers: `scripts/gg.cmd`, `gitgen.cmd`, `git-gen.cmd`.
 
 ---
 
@@ -329,10 +376,14 @@ app/
   globals.css
 lib/
   commit-message.ts             # shared git + AI generation (app + CLI)
+  version.ts                    # getVersion() — reads package.json
 scripts/
-  open-here.ps1 / .cmd / .mjs   # open app with current folder (dispatches CLI when args passed)
-  gg.cmd / gitgen.cmd / git-gen.cmd  # PATH launchers (short + long; bare = help)
-  cli.ts                        # CLI: start, c|commit, b|branch, m|merge, s|save, sw|switch, r|remote, rs|restore
+  cli.ts                        # CLI entry: start, workflows, version, short aliases, help
+  bump-version.ts               # semver bump → package.json + CHANGELOG.md
+  gg.cmd / gitgen.cmd / git-gen.cmd  # PATH launchers → cli.ts (bare = help)
+  open-here.ps1 / .cmd / .mjs   # open app with cwd (?path=); used by `gg start`
+  tray.ps1 / tray.vbs           # background server tray helper (Windows)
+CHANGELOG.md                    # release notes (kept in sync by bump script)
 start-dev.bat                   # start server + open browser
 .env.example                    # public template
 LICENSE                         # non-commercial
@@ -368,6 +419,6 @@ Commercial licenses or exceptions: contact the author.
 
 **Jubarte** · 2026
 
-<sub>Built for speed in the terminal — with commit messages that don't embarrass you.</sub>
+<sub>Built for speed in the terminal — <code>gg c p</code> and commit messages that don't embarrass you.</sub>
 
 </div>
