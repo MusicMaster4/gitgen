@@ -8,7 +8,7 @@
  *
  *   commit [push] [-m msg]   add . -> (AI) commit [-> push]
  *   branch <name> [-m msg]   checkout -b -> add -> commit -> push -u origin <name>
- *   merge  <branch> [-m msg] add -> commit -> checkout main -> merge <branch> -> push
+ *   merge  <src> [dst] [-m]  add -> commit -> checkout <dst|main> -> merge <src> -> push
  *   save   [-m msg]          add -> commit -> checkout main (save state, back to main)
  *   switch <branch>          checkout <branch>
  *   remote <url> [-m msg]    git init -> remote add origin -> add -> commit -> push -u origin main
@@ -246,12 +246,13 @@ for (let i = 0; i < argv.length; i++) {
 }
 const cmd = (positional[0] || "").toLowerCase();
 const arg1 = positional[1];
+const arg2 = positional[2];
 
 const HELP = `gitgen — terminal git workflows (folder: ${cwd})
 
   gitgen commit [push] [-m "msg"]   add . -> commit [-> push]  (AI message if -m omitted)
   gitgen branch <name> [-m "msg"]   new branch -> add -> commit -> push -u origin <name>
-  gitgen merge  <branch> [-m "msg"] commit -> checkout main -> merge <branch> -> push
+  gitgen merge  <src> [dst] [-m]    commit -> checkout <dst|main> -> merge <src> -> push
   gitgen save   [-m "msg"]          commit current work, then checkout main
   gitgen switch <branch>            checkout <branch>
   gitgen remote <url> [-m "msg"]    git init -> remote add origin -> first push (main)
@@ -302,18 +303,19 @@ async function main() {
     }
 
     case "merge": {
-      const target = arg1;
-      if (!target) die('branch name required — e.g. gitgen merge feature/login');
-      log(`Git Command Generator — merge ${target} into main`);
+      const source = arg1;
+      if (!source) die('branch name required — e.g. gitgen merge feature/login [target]');
+      const target = arg2 || "main";
+      log(`Git Command Generator — merge ${source} into ${target}`);
       log(`  folder : ${cwd}`);
-      const message = await resolveMessage(messageFlag, `merge: integrate ${target} into main`);
+      const message = await resolveMessage(messageFlag, `merge: integrate ${source} into ${target}`);
       await runSteps(async () => {
         if (await hasChanges()) {
           await git(["add", "."]);
           await git(["commit", "-m", message]);
         }
-        await git(["checkout", "main"]);
-        await git(["merge", target]);
+        await git(["checkout", target]);
+        await git(["merge", source]);
         await git(["push"], { progress: true });
       });
       return;

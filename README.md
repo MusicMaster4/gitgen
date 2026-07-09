@@ -208,6 +208,7 @@ gitgen commit              # add . -> AI commit message -> commit
 gitgen commit push         # ...and then push
 gitgen branch feature/x    # new branch -> add -> commit -> push -u origin feature/x
 gitgen merge feature/x     # commit -> checkout main -> merge feature/x -> push
+gitgen merge feature/x dev # ...merge feature/x into dev instead of main
 gitgen save                # commit current work, then checkout main
 gitgen switch main         # checkout main
 gitgen remote <url>        # git init -> remote add origin -> first push (main)
@@ -221,7 +222,7 @@ gitgen help                # list every command
 | `gitgen commit` | 02 Commit Only | `git add .` → AI/`-m` message → `git commit` |
 | `gitgen commit push` | 01 Commit + Push | …then `git push` |
 | `gitgen branch <name>` | 03 Create Branch | `checkout -b` → add → commit → `push -u origin <name>` |
-| `gitgen merge <branch>` | 04 Merge into Main | commit → `checkout main` → `merge <branch>` → push |
+| `gitgen merge <src> [dst]` | 04 Merge into Main | commit → `checkout <dst or main>` → `merge <src>` → push |
 | `gitgen save` | 05 Save & Return | commit current work → `checkout main` |
 | `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
 | `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
