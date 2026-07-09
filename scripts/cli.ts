@@ -1,11 +1,9 @@
-#!/usr/bin/env bun
 /**
  * gitgen / gg CLI — terminal equivalents of every workflow card in the web app.
- * Runs the git commands directly in the current folder (no server needed) and
- * reuses the app's AI message generator (lib/commit-message.ts).
+ * Runs git in the current folder (no server needed) and reuses lib/commit-message.ts.
  *
- * Reads provider/keys from the app's .env.local.
- * Run:  bun scripts/cli.ts <cmd> [args]   |   gitgen <cmd>   |   gg <cmd>
+ * Config: user-level OpenRouter settings (see lib/config.ts). Env overrides allowed.
+ * Run:  node dist/cli.js <cmd>  |  gitgen <cmd>  |  gg <cmd>
  *
  * Long form              Short        What it does
  * ─────────────────────  ───────────  ──────────────────────────────────────────
@@ -17,6 +15,9 @@
  *   switch <branch>      sw <branch>  checkout <branch>
  *   remote <url>         r <url>      init -> remote add origin -> first push
  *   restore [file]       rs [file]    git restore . (or one file) — destructive
+ *   setup                setup        OpenRouter onboard (key + model + language)
+ *   config […]           config       show or set config
+ *   update               u            check npm for a newer version / install
  *   version              v            print CLI / package version
  *   help                 h            show this list (also the default with no args)
  *
@@ -25,7 +26,6 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,49 +34,32 @@ import {
   CommitMessageError,
   DEFAULT_MODELS,
   PROVIDER_LABEL,
-  type Provider,
   generateCommitMessage,
 } from "../lib/commit-message";
-import { APP_NAME, CLI_NAME, getVersion } from "../lib/version";
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  type CommitLanguage,
+  type GitgenConfig,
+  getConfigPath,
+  loadConfig,
+  maskApiKey,
+  resolveRuntimeSettings,
+  saveConfig,
+} from "../lib/config";
+import {
+  evaluateUpdate,
+  npmGlobalInstallCommand,
+  parseNpmLatestVersion,
+} from "../lib/update-check";
+import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 
 const pexec = promisify(execFile);
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const here = dirname(fileURLToPath(import.meta.url));
+// Source: scripts/ → repo root; bundled: dist/ → package root
+const packageRoot = join(here, "..");
 const cwd = process.cwd();
 
-/* ── env ── */
-function loadEnvFile(file: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  let raw: string;
-  try {
-    raw = readFileSync(file, "utf8");
-  } catch {
-    return out;
-  }
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (key) out[key] = value;
-  }
-  return out;
-}
-
-const env = { ...loadEnvFile(join(repoRoot, ".env.local")), ...process.env };
-const provider: Provider = (env.AI_PROVIDER || "").trim() === "openai" ? "openai" : "openrouter";
-const apiKey = ((provider === "openai" ? env.OPENAI_API_KEY : env.OPENROUTER_API_KEY) || "").trim();
-const model =
-  ((provider === "openai" ? env.OPENAI_MODEL : env.OPENROUTER_MODEL) || "").trim() ||
-  DEFAULT_MODELS[provider];
-const language: "en" | "pt" = (env.COMMIT_LANGUAGE || "").trim() === "pt" ? "pt" : "en";
+const PROVIDER = "openrouter" as const;
 
 /* ── helpers ── */
 function log(msg: string) {
@@ -87,15 +70,32 @@ function die(msg: string): never {
   process.exit(1);
 }
 
+function readUserConfig(): GitgenConfig {
+  return loadConfig(getConfigPath());
+}
+
+function currentSettings(): {
+  apiKey: string;
+  model: string;
+  language: CommitLanguage;
+  configPath: string;
+} {
+  const configPath = getConfigPath();
+  const file = loadConfig(configPath);
+  const { apiKey, model, language } = resolveRuntimeSettings(file, process.env);
+  return { apiKey, model, language, configPath };
+}
+
 /* ── live progress indicator ── */
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const BAR_WIDTH = 22;
-// When launched through PowerShell/cmd, node/bun often can't see the console and
+const BAR_WIDTH = 14;
+// When launched through PowerShell/cmd, node often can't see the console and
 // report isTTY=undefined. The launcher sets GCG_TTY=1 when it knows it's interactive.
-// Because bun then hasn't enabled VT processing, we clear the line by padding with
-// spaces (plain \r) instead of ANSI escapes, which may not render on that console.
+// Clear with plain \r + spaces (no ANSI) so it still works without VT mode.
 const animate = Boolean(process.stdout.isTTY) || process.env.GCG_TTY === "1";
 const secs = (start: number) => `${((Date.now() - start) / 1000).toFixed(1)}s`;
+/** Cap line length so \r overwrite never wraps (wrap = garble on Windows). */
+const termCols = () => Math.max(40, Math.min(process.stdout.columns || 80, 100));
 
 function bar(percent: number): string {
   const pct = Math.max(0, Math.min(100, percent));
@@ -104,22 +104,36 @@ function bar(percent: number): string {
 }
 
 /**
- * If a git progress fragment carries a percentage (e.g. "Writing objects: 60% (12/20)")
- * render it as a real bar with the phase name; otherwise fall back to the raw text.
+ * Short spinner label — never include `-m <message>` or long argv.
+ * Long labels wrap the live line; wrap + \r is what made the CLI look bloated.
  */
-function renderDetail(detail: string): string {
-  const m = detail.match(/(\d{1,3})%/);
-  if (m) {
-    const phase = detail.split(":")[0].trim();
-    return ` ${bar(parseInt(m[1], 10))}${phase ? ` ${phase}` : ""}`;
-  }
-  return detail ? ` — ${detail}` : "";
+function gitLabel(args: string[]): string {
+  const cmd = args[0] || "git";
+  if (cmd === "checkout" && args[1] === "-b" && args[2]) return `git checkout -b ${args[2]}`;
+  if (cmd === "checkout" && args[1]) return `git checkout ${args[1]}`;
+  if (cmd === "push" && args.includes("-u")) return "git push -u";
+  if (cmd === "merge" && args[1]) return `git merge ${args[1]}`;
+  if (cmd === "restore" && args[1] && args[1] !== ".") return `git restore ${args[1]}`;
+  if (cmd === "remote" && args[1] === "add") return "git remote add";
+  if (cmd === "branch" && args[1] === "-M") return "git branch -M";
+  return `git ${cmd}`;
 }
 
 /**
- * Run an async step with a live one-line indicator: spinner + elapsed time, plus a
- * real progress bar whenever the step streams a percentage (git transfer progress).
- * Falls back to plain start/end lines when stdout isn't a TTY (piped/redirected).
+ * Percent phases only (Counting/Writing objects…). Drop "Total 13 (delta…)",
+ * "remote: …" and other non-% spam that used to pile onto one line.
+ */
+function renderDetail(detail: string): string {
+  const m = detail.match(/(\d{1,3})%/);
+  if (!m) return "";
+  const phase = detail.split(":")[0].trim().replace(/\s+/g, " ");
+  const short = (phase.split(/\s+/)[0] || phase).slice(0, 12);
+  return ` ${bar(parseInt(m[1], 10))} ${short}`;
+}
+
+/**
+ * Live one-line step: spinner + time, optional compact transfer bar.
+ * Non-TTY: plain start/end lines (sparse % milestones only).
  */
 async function withProgress<T>(
   label: string,
@@ -128,12 +142,12 @@ async function withProgress<T>(
   const start = Date.now();
   let detail = "";
   let frame = 0;
-  // Non-animated fallback: print progress milestones as discrete lines so piped
-  // output / dumb terminals still show advancement (every ~25% and on phase change).
   let lastPhase = "";
   let lastMilestone = -1;
   const setDetail = (s: string) => {
-    detail = s.length > 70 ? s.slice(0, 67) + "…" : s;
+    // Ignore anything without a % — that's most of the push "bloat".
+    if (!/\d{1,3}%/.test(s)) return;
+    detail = s;
     if (animate) return;
     const m = s.match(/(\d{1,3})%/);
     if (!m) return;
@@ -143,32 +157,34 @@ async function withProgress<T>(
       lastPhase = phase;
       lastMilestone = -1;
     }
-    if (pct >= lastMilestone + 25 || pct === 100) {
+    if (pct >= lastMilestone + 50 || pct === 100) {
       lastMilestone = pct;
-      log(`    ${phase} ${bar(pct)}`);
+      log(`    ${renderDetail(s).trim()}`);
     }
   };
-  // Overwrite the line with \r, padding with spaces to erase the previous (longer) frame.
-  let lastLen = 0;
+  // Full-width clear then write; truncate so the line never wraps.
   const paint = (content: string, newline = false) => {
-    const pad = content.length < lastLen ? " ".repeat(lastLen - content.length) : "";
-    lastLen = content.length;
-    process.stdout.write(`\r${content}${pad}${newline ? "\n" : ""}`);
+    const cols = termCols();
+    const max = cols - 1;
+    const line = content.length > max ? `${content.slice(0, Math.max(1, max - 1))}…` : content;
+    process.stdout.write(`\r${" ".repeat(max)}\r${line}${newline ? "\n" : ""}`);
   };
   const draw = () => {
-    paint(`  ${SPINNER[(frame = (frame + 1) % SPINNER.length)]} ${label}${renderDetail(detail)}  ${secs(start)}`);
+    paint(
+      `  ${SPINNER[(frame = (frame + 1) % SPINNER.length)]} ${label}${renderDetail(detail)}  ${secs(start)}`
+    );
   };
   let timer: ReturnType<typeof setInterval> | undefined;
   if (animate) {
     draw();
-    timer = setInterval(draw, 80);
+    timer = setInterval(draw, 100);
   } else {
-    log(`  · ${label} ...`);
+    log(`  · ${label}`);
   }
   const finish = (mark: string) => {
     if (timer) clearInterval(timer);
     if (animate) paint(`  ${mark} ${label}  ${secs(start)}`, true);
-    else log(`  ${mark} ${label} (${secs(start)})`);
+    else log(`  ${mark} ${label}  ${secs(start)}`);
   };
   try {
     const result = await fn(setDetail);
@@ -180,11 +196,10 @@ async function withProgress<T>(
   }
 }
 
-/** Run a git command with a live indicator; throws on non-zero exit (stderr on the error). */
 async function git(args: string[], opts: { progress?: boolean } = {}): Promise<string> {
-  // `--progress` forces git to emit transfer progress even when stderr isn't a TTY.
+  // `--progress` forces git to emit transfer % even when stderr isn't a TTY.
   const spawnArgs = opts.progress ? [args[0], "--progress", ...args.slice(1)] : args;
-  const stdout = await withProgress(`git ${args.join(" ")}`, (setDetail) =>
+  const stdout = await withProgress(gitLabel(args), (setDetail) =>
     new Promise<string>((resolve, reject) => {
       const child = spawn("git", spawnArgs, { cwd, windowsHide: true });
       let out = "";
@@ -192,7 +207,7 @@ async function git(args: string[], opts: { progress?: boolean } = {}): Promise<s
       child.stdout.on("data", (d) => (out += d));
       child.stderr.on("data", (d) => {
         err += d;
-        // git writes progress with \r; surface the latest non-empty fragment live.
+        // Only forward the latest fragment; setDetail drops non-% noise.
         const last = d.toString().split(/[\r\n]+/).filter(Boolean).pop();
         if (last) setDetail(last.trim());
       });
@@ -200,25 +215,34 @@ async function git(args: string[], opts: { progress?: boolean } = {}): Promise<s
       child.on("close", (code) => {
         if (code === 0) return resolve(out);
         const e = new Error(`git ${args[0]} failed`) as Error & { stderr: string };
-        e.stderr = (err.trim() || out.trim());
+        e.stderr = err.trim() || out.trim();
         reject(e);
       });
     })
   );
-  // Show the useful summary lines, but drop git's per-file "create/delete/rename mode" noise.
+  // Short summary: drop mode lines and per-file "| N +++" noise from commit.
   const summary = stdout
     .split("\n")
-    .filter((l) => l.trim() && !/^\s*(create|delete|rename) mode /.test(l))
-    .map((l) => `    ${l.trimEnd()}`)
+    .map((l) => l.trimEnd())
+    .filter(
+      (l) =>
+        l.trim() &&
+        !/^\s*(create|delete|rename) mode /.test(l) &&
+        !/^\s+\S.*\|/.test(l)
+    )
+    .map((l) => `    ${l.trim()}`)
     .join("\n");
   if (summary) log(summary);
   return stdout;
 }
 
-/** Read-only git; returns "" on failure. */
 async function gitQuiet(args: string[]): Promise<string> {
   try {
-    const { stdout } = await pexec("git", args, { cwd, maxBuffer: 8 * 1024 * 1024, windowsHide: true });
+    const { stdout } = await pexec("git", args, {
+      cwd,
+      maxBuffer: 8 * 1024 * 1024,
+      windowsHide: true,
+    });
     return stdout;
   } catch {
     return "";
@@ -229,18 +253,108 @@ async function hasChanges(): Promise<boolean> {
   return (await gitQuiet(["status", "--porcelain", "-u"])).trim() !== "";
 }
 
+async function promptLine(question: string, defaultValue?: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const hint = defaultValue ? ` [${defaultValue}]` : "";
+  const answer = (await rl.question(`  ${question}${hint}\n  > `)).trim();
+  rl.close();
+  return answer || defaultValue || "";
+}
+
+/** Interactive OpenRouter-only onboard. */
+async function runSetup(existing?: GitgenConfig): Promise<GitgenConfig> {
+  log("");
+  log(`  ${CLI_NAME} setup — OpenRouter`);
+  log("  ─────────────────────────────");
+  log("  Get a key at https://openrouter.ai/keys");
+  log("");
+
+  const prev = existing || readUserConfig();
+  const key = await promptLine(
+    "OpenRouter API key",
+    prev.openRouterApiKey ? maskApiKey(prev.openRouterApiKey) : undefined
+  );
+  // If user left mask placeholder, keep previous key
+  let openRouterApiKey = key;
+  if (prev.openRouterApiKey && (key === maskApiKey(prev.openRouterApiKey) || !key)) {
+    openRouterApiKey = prev.openRouterApiKey;
+  }
+  if (!openRouterApiKey || openRouterApiKey.includes("…")) {
+    // empty or still masked without previous
+    if (!prev.openRouterApiKey) die("OpenRouter API key is required");
+    openRouterApiKey = prev.openRouterApiKey;
+  }
+
+  const model =
+    (await promptLine("Model (OpenRouter slug)", prev.model || DEFAULT_OPENROUTER_MODEL)) ||
+    DEFAULT_OPENROUTER_MODEL;
+
+  const langRaw = (
+    await promptLine("Language (en|pt)", prev.language || "en")
+  ).toLowerCase();
+  const language: CommitLanguage = langRaw === "pt" ? "pt" : "en";
+
+  const next: GitgenConfig = { openRouterApiKey, model, language };
+  const path = getConfigPath();
+  saveConfig(next, path);
+  log("");
+  log(`  ✓ Saved to ${path}`);
+  log(`  model : ${model}`);
+  log(`  lang  : ${language}`);
+  log("");
+  return next;
+}
+
+/**
+ * Ensure we have an API key for AI messages.
+ * First AI use without a key runs setup when stdin is a TTY.
+ */
+async function ensureApiReady(): Promise<{
+  apiKey: string;
+  model: string;
+  language: CommitLanguage;
+}> {
+  let { apiKey, model, language, configPath } = currentSettings();
+  if (apiKey) return { apiKey, model, language };
+
+  const interactive =
+    Boolean(process.stdin.isTTY) || process.env.GCG_TTY === "1" || Boolean(process.stdout.isTTY);
+  if (!interactive) {
+    return { apiKey: "", model, language };
+  }
+
+  log(`  No OpenRouter API key found (${configPath}).`);
+  log("  Starting first-time setup…");
+  const saved = await runSetup(readUserConfig());
+  const resolved = resolveRuntimeSettings(saved, process.env);
+  return resolved;
+}
+
 /** Resolve the commit message: explicit -m wins, else AI (if a key is set), else the default. */
 async function resolveMessage(explicit: string | undefined, fallback: string): Promise<string> {
   if (explicit && explicit.trim()) return explicit.trim();
+
+  const { apiKey, model, language } = await ensureApiReady();
   if (apiKey) {
     try {
-      const m = await withProgress(`AI commit message · ${PROVIDER_LABEL[provider]}`, () =>
-        generateCommitMessage({ path: cwd, provider, apiKey, model, language })
+      const m = await withProgress(`AI commit message · ${PROVIDER_LABEL[PROVIDER]}`, () =>
+        generateCommitMessage({
+          path: cwd,
+          provider: PROVIDER,
+          apiKey,
+          model: model || DEFAULT_MODELS.openrouter,
+          language,
+        })
       );
       log(`  message: ${m}`);
       return m;
     } catch (e) {
-      const reason = e instanceof CommitMessageError ? e.message : e instanceof Error ? e.message : String(e);
+      const reason =
+        e instanceof CommitMessageError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e);
       log(`  ai     : skipped (${reason}) — using default`);
       return fallback;
     }
@@ -256,7 +370,6 @@ async function confirm(question: string): Promise<boolean> {
   return answer === "y" || answer === "yes";
 }
 
-/** Wrap a sequence of mutating git steps with unified error reporting. */
 async function runSteps(steps: () => Promise<void>): Promise<void> {
   try {
     await steps();
@@ -279,7 +392,6 @@ for (let i = 0; i < argv.length; i++) {
   else positional.push(a);
 }
 
-/** Short → long command map. Both forms work: `gg c` / `gitgen commit`. */
 const SHORT_CMDS: Record<string, string> = {
   c: "commit",
   b: "branch",
@@ -290,24 +402,25 @@ const SHORT_CMDS: Record<string, string> = {
   rs: "restore",
   v: "version",
   h: "help",
+  u: "update",
 };
 
 const rawCmd = (positional[0] || "").toLowerCase();
 const cmd = SHORT_CMDS[rawCmd] || rawCmd;
 const arg1 = positional[1];
 const arg2 = positional[2];
+const arg3 = positional[3];
 
-/** True when the token means "also push" after commit (`push` or short `p`). */
 function isPushToken(t: string | undefined): boolean {
   const v = (t || "").toLowerCase();
   return v === "push" || v === "p";
 }
 
-/** Open the web app for the current folder (starts the dev server if needed). */
+/** Open the web app for the current folder (local-dev; needs a checkout of this repo). */
 async function openApp(): Promise<void> {
-  const scriptDir = dirname(fileURLToPath(import.meta.url));
   const port = process.env.GCG_PORT || "2001";
   log(`Git Command Generator — start (folder: ${cwd})`);
+  log("  note   : web UI is local-dev (npm run dev in a full checkout)");
   await new Promise<void>((resolve, reject) => {
     const child =
       process.platform === "win32"
@@ -318,13 +431,13 @@ async function openApp(): Promise<void> {
               "-ExecutionPolicy",
               "Bypass",
               "-File",
-              join(scriptDir, "open-here.ps1"),
+              join(packageRoot, "scripts", "open-here.ps1"),
               "-Port",
               port,
             ],
             { stdio: "inherit", cwd, windowsHide: true }
           )
-        : spawn("bun", [join(scriptDir, "open-here.mjs")], {
+        : spawn(process.execPath, [join(packageRoot, "scripts", "open-here.mjs")], {
             stdio: "inherit",
             cwd,
             env: { ...process.env, GCG_PORT: port },
@@ -337,7 +450,130 @@ async function openApp(): Promise<void> {
   });
 }
 
-const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
+async function cmdConfig(): Promise<void> {
+  const sub = (arg1 || "show").toLowerCase();
+  const path = getConfigPath();
+  const file = loadConfig(path);
+  const runtime = resolveRuntimeSettings(file, process.env);
+
+  if (sub === "show" || sub === "") {
+    log(`${CLI_NAME} config`);
+    log(`  path   : ${path}`);
+    log(
+      `  key    : ${runtime.apiKey ? maskApiKey(runtime.apiKey) : "(not set)"}`
+    );
+    log(`  model  : ${runtime.model}`);
+    log(`  lang   : ${runtime.language}`);
+    log(`  source : ${process.env.OPENROUTER_API_KEY ? "env (+ file)" : "config file"}`);
+    return;
+  }
+
+  if (sub === "set") {
+    const field = (arg2 || "").toLowerCase();
+    const value = arg3;
+    if (!field || value === undefined) {
+      die('usage: gitgen config set <model|key|language> <value>');
+    }
+    const next: GitgenConfig = { ...file };
+    if (field === "model") next.model = value;
+    else if (field === "key" || field === "apikey" || field === "api-key") {
+      next.openRouterApiKey = value;
+    } else if (field === "language" || field === "lang") {
+      next.language = value.toLowerCase() === "pt" ? "pt" : "en";
+    } else {
+      die(`unknown field "${field}" — use model, key, or language`);
+    }
+    saveConfig(next, path);
+    log(`  ✓ Updated ${field} in ${path}`);
+    return;
+  }
+
+  if (sub === "path") {
+    log(path);
+    return;
+  }
+
+  die(`unknown config subcommand "${sub}" — use show | set | path`);
+}
+
+async function fetchLatestFromNpm(packageName: string): Promise<string> {
+  const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(`npm registry HTTP ${res.status} for ${packageName}`);
+  }
+  const json: unknown = await res.json();
+  return parseNpmLatestVersion(json);
+}
+
+async function cmdUpdate(): Promise<void> {
+  const packageName = getPackageName();
+  const current = getVersion();
+  log(`${CLI_NAME} update`);
+  log(`  package: ${packageName}`);
+  log(`  current: ${current}`);
+
+  let latest: string;
+  try {
+    latest = await withProgress("check npm registry", () => fetchLatestFromNpm(packageName));
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    log(`  status : could not check registry (${reason})`);
+    log(`  tip    : ${npmGlobalInstallCommand(packageName)}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const result = evaluateUpdate(current, latest);
+  if (result.status === "up-to-date") {
+    log(`  latest : ${latest}`);
+    log("  status : already up to date");
+    return;
+  }
+  if (result.status === "unknown") {
+    log(`  latest : ${latest}`);
+    log(`  status : ${result.reason}`);
+    log(`  tip    : ${npmGlobalInstallCommand(packageName, latest)}`);
+    return;
+  }
+
+  log(`  latest : ${latest}`);
+  log("  status : update available");
+  const installCmd = npmGlobalInstallCommand(packageName, latest);
+  log(`  running: ${installCmd}`);
+
+  await new Promise<void>((resolve) => {
+    const child = spawn("npm", ["install", "-g", `${packageName}@${latest}`], {
+      stdio: "inherit",
+      shell: true,
+      windowsHide: true,
+    });
+    child.on("error", (err) => {
+      log(`  error  : ${err.message}`);
+      log(`  tip    : run manually: ${installCmd}`);
+      process.exitCode = 1;
+      resolve();
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        log(`  done   : installed ${packageName}@${latest}`);
+        log(`  verify : ${CLI_NAME} version`);
+      } else {
+        log(`  error  : npm exited with code ${code ?? "?"}`);
+        log(`  tip    : ${installCmd}`);
+        process.exitCode = code ?? 1;
+      }
+      resolve();
+    });
+  });
+}
+
+function helpText(): string {
+  const { apiKey, model } = currentSettings();
+  return `gitgen / gg — terminal git workflows (folder: ${cwd})
   ${CLI_NAME} ${getVersion()}  (${APP_NAME})
 
   Long                    Short              Action
@@ -350,20 +586,22 @@ const HELP = `gitgen / gg — terminal git workflows (folder: ${cwd})
   switch <branch>         sw <branch>        checkout <branch>
   remote <url> [-m msg]   r <url> [-m msg]   git init -> remote add origin -> first push
   restore [file] [-y]     rs [file] [-y]     discard changes (all, or one file)
+  setup                   setup              OpenRouter onboard (API key + model)
+  config [show|set|path]  config             show or set user config
+  update                  u                  check npm / install latest
   version                 v / -v / --version print installed version (from package.json)
   help                    h                  show this list (default if no command)
 
   Examples:
-    gg start             gitgen start
-    gg c                 gitgen commit
-    gg c p               gitgen commit push
-    gg b feature/login   gitgen branch feature/login
-    gg m feature/login   gitgen merge feature/login
-    gg s                 gitgen save
-    gg sw main           gitgen switch main
-    gg v                 gitgen version
+    npm install -g ${getPackageName()}
+    gg setup
+    gg c p
+    gg config set model google/gemini-2.0-flash-001
+    gg update
+    gg v
 
-AI: ${PROVIDER_LABEL[provider]} (${model})${apiKey ? "" : " — no API key set, defaults used"}`;
+AI: ${PROVIDER_LABEL[PROVIDER]} (${model})${apiKey ? "" : " — no API key (run gitgen setup)"}`;
+}
 
 async function main() {
   switch (cmd) {
@@ -371,15 +609,26 @@ async function main() {
     case "help":
     case "-h":
     case "--help":
-      log(HELP);
+      log(helpText());
       return;
 
     case "version":
     case "--version":
-    case "-v": // also matches -V after argv lowercasing
-      // Machine-friendly first line; details after for humans.
+    case "-v":
       log(`${CLI_NAME} ${getVersion()}`);
       log(`${APP_NAME} (package.json)`);
+      return;
+
+    case "setup":
+      await runSetup(readUserConfig());
+      return;
+
+    case "config":
+      await cmdConfig();
+      return;
+
+    case "update":
+      await cmdUpdate();
       return;
 
     case "start": {

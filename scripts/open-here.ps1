@@ -19,15 +19,21 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # Qualquer argumento vira subcomando CLI (longos ou curtos: c/commit, b/branch,
 # m/merge, s/save, sw/switch, r/remote, rs/restore, h/help). Sem args = app.
 if ($Rest.Count -ge 1) {
-  $bun = Get-Command bun -ErrorAction SilentlyContinue
-  if (-not $bun) {
-    Write-Error "bun nao encontrado no PATH. Instale o Bun para usar os comandos 'gg' / 'gitgen'."
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $node) {
+    Write-Error "node nao encontrado no PATH. Instale Node.js 18+ para usar 'gg' / 'gitgen'."
     exit 1
   }
-  # bun/node nao enxergam o console via PowerShell (isTTY=undefined). Se a saida
-  # nao esta redirecionada, avisamos o CLI que pode animar spinner + progress bar.
+  # node via PowerShell often has isTTY=undefined; GCG_TTY enables spinners.
   if (-not [Console]::IsOutputRedirected) { $env:GCG_TTY = "1" }
-  & bun (Join-Path $PSScriptRoot "cli.ts") @Rest
+  $cli = Join-Path (Split-Path -Parent $PSScriptRoot) "dist\cli.js"
+  if (-not (Test-Path $cli)) {
+    Push-Location (Split-Path -Parent $PSScriptRoot)
+    npm run build:cli
+    if ($LASTEXITCODE -ne 0) { Pop-Location; exit $LASTEXITCODE }
+    Pop-Location
+  }
+  & node $cli @Rest
   exit $LASTEXITCODE
 }
 $cwd = (Get-Location).Path
@@ -78,13 +84,13 @@ if (Test-ServerReady $portNum) {
     exit 1
   }
 
-  $bun = Get-Command bun -ErrorAction SilentlyContinue
-  if (-not $bun) {
-    Write-Error "bun nao encontrado no PATH. Instale o Bun ou rode o server manualmente."
+  $npm = Get-Command npm -ErrorAction SilentlyContinue
+  if (-not $npm) {
+    Write-Error "npm nao encontrado no PATH. Instale Node.js ou rode o server manualmente (npm run dev)."
     exit 1
   }
 
-  # Sobe a bandeja (tray.vbs esconde tudo). O tray.ps1 sobe o bun run dev
+  # Sobe a bandeja (tray.vbs esconde tudo). O tray.ps1 sobe o npm run dev
   # oculto e coloca o icone perto do relogio (menu: Abrir / Logs / Encerrar).
   $env:GCG_PORT = $Port
   $vbs = Join-Path $PSScriptRoot "tray.vbs"

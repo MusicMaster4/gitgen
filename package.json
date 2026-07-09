@@ -1,24 +1,49 @@
 {
   "name": "git-command-generator",
   "version": "1.0.0",
-  "private": true,
+  "description": "Terminal git workflows with OpenRouter AI commit messages (gitgen / gg CLI)",
+  "keywords": [
+    "git",
+    "cli",
+    "commit",
+    "conventional-commits",
+    "openrouter",
+    "gitgen"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "bin": {
+    "gitgen": "./dist/cli.js",
+    "gg": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MusicMaster4/git-command-generator.git"
+  },
   "scripts": {
     "dev": "next dev -p 2001",
     "build": "next build",
+    "build:cli": "tsup && node scripts/postbuild-cli.mjs",
+    "prepublishOnly": "npm run build:cli",
     "start": "next start -p 2001",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "here": "bun scripts/open-here.mjs",
-    "cli": "bun scripts/cli.ts",
-    "version:show": "bun scripts/cli.ts version",
-    "version:patch": "bun scripts/bump-version.ts patch",
-    "version:minor": "bun scripts/bump-version.ts minor",
-    "version:major": "bun scripts/bump-version.ts major"
-  },
-  "dependencies": {
-    "next": "16.2.10",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "here": "node scripts/open-here.mjs",
+    "cli": "npm run build:cli && node dist/cli.js",
+    "test": "tsx --test test/**/*.test.ts",
+    "version:show": "npm run build:cli && node dist/cli.js version",
+    "version:patch": "tsx scripts/bump-version.ts patch",
+    "version:minor": "tsx scripts/bump-version.ts minor",
+    "version:major": "tsx scripts/bump-version.ts major"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
@@ -27,10 +52,12 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.10",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "tailwindcss": "^4.3.2",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
     "typescript": "^5.9.3"
-  },
-  "trustedDependencies": [
-    "unrs-resolver"
-  ]
+  }
 }

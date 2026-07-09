@@ -11,7 +11,8 @@ A local Next.js tool that builds ready-to-paste Git workflows — and generates 
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tailwind-4-38B2AC?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind" />
-  <img src="https://img.shields.io/badge/Bun-ready-fbf0df?style=for-the-badge&logo=bun&logoColor=black" alt="Bun" />
+  <img src="https://img.shields.io/badge/Node-18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node" />
+  <img src="https://img.shields.io/badge/npm-installable-CB3837?style=for-the-badge&logo=npm&logoColor=white" alt="npm" />
 </p>
 
 <p>
@@ -121,104 +122,87 @@ flowchart LR
 
 ## Quick start
 
-### Prerequisites
+### Install the CLI (recommended)
 
-- [Bun](https://bun.sh) (recommended) or Node 18+
-- Git installed and on your `PATH`
+Requires [Node.js 18+](https://nodejs.org) and Git on your `PATH`.
 
-### 1 · Clone & install
+```bash
+npm install -g git-command-generator
+```
+
+This puts **`gitgen`** and **`gg`** on your PATH. First AI use runs an OpenRouter setup wizard (API key + model). You can also run:
+
+```bash
+gitgen setup
+gitgen config              # show key (masked), model, language
+gitgen config set model google/gemini-2.0-flash-001
+gitgen update              # check npm / install latest
+```
+
+User config is stored outside the repo:
+
+| OS | Path |
+|----|------|
+| Windows | `%APPDATA%\gitgen\config.json` |
+| macOS | `~/Library/Application Support/gitgen/config.json` |
+| Linux | `~/.config/gitgen/config.json` |
+
+Env overrides (optional): `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `COMMIT_LANGUAGE`, `GITGEN_CONFIG_DIR`.
+
+### Web app (local development)
 
 ```bash
 git clone https://github.com/MusicMaster4/git-command-generator.git
 cd git-command-generator
-bun install
+npm install
+cp .env.example .env.local   # optional server keys for the Next.js app
+npm run dev
 ```
 
-### 2 · Environment
-
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local` — **never commit this file**:
-
-```env
-AI_PROVIDER=openrouter          # openrouter | openai
-
-OPENROUTER_API_KEY=
-OPENROUTER_MODEL=google/gemini-2.0-flash-001
-
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.4-mini
-
-COMMIT_LANGUAGE=en              # en | pt
-```
-
-| Variable | Description |
-|----------|-------------|
-| `AI_PROVIDER` | Default provider shown in the UI |
-| `OPENROUTER_*` / `OPENAI_*` | Server-side API keys & models |
-| `COMMIT_LANGUAGE` | Default language for AI commit messages |
-
-> Keys can live in `.env.local` **or** be entered in the UI — or both. Server keys are preferred for local use.
-
-### 3 · Run
-
-```bash
-bun run dev
-```
-
-Open **[http://localhost:2001](http://localhost:2001)** — or double-click `start-dev.bat` on Windows.
-
-On first launch (without `?path=`), a modal asks for your project folder: pick a **recent** path or **paste** one.
+Open **[http://localhost:2001](http://localhost:2001)**.
 
 ### Scripts
 
 | Command | What it does |
 |---------|--------------|
-| `bun run dev` | Dev server on port **2001** |
-| `bun run build` | Production build |
-| `bun run start` | Serve the build (port 2001) |
-| `bun run lint` | ESLint |
-| `bun run typecheck` | TypeScript check |
-| `bun run here` | Open app with **current directory** (`?path=`) |
-| `gg start` / `gitgen start` | Same idea from PATH — see [CLI](#cli) |
+| `npm run dev` | Dev server on port **2001** |
+| `npm run build` | Production build (web) |
+| `npm run build:cli` | Build Node CLI → `dist/cli.js` |
+| `npm run start` | Serve the web build (port 2001) |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript check |
+| `npm test` | Unit tests (config + update logic) |
+| `npm run here` | Open app with **current directory** (`?path=`) |
+| `gg` / `gitgen` | CLI on PATH after global install — see [CLI](#cli) |
+
+### Releases
+
+Push to `main` runs `.github/workflows/release.yml`: patch bump, tag, GitHub Release, and `npm publish` when the `NPM_TOKEN` secret is set. Commits with `[skip release]` or messages starting with `chore(release):` do not publish (anti-loop).
 
 ---
 
 ## CLI
 
-Run Git Command Generator from **any** project folder via **`gg`**, **`gitgen`**, or **`git-gen`**. Three equivalent launchers live in `scripts/`:
+Run Git Command Generator from **any** project folder via **`gg`** or **`gitgen`** (same binary).
 
 | Launcher | Notes |
 |----------|--------|
 | `gg` | Short name (recommended) |
 | `gitgen` | Full name |
-| `git-gen` | Hyphenated alias |
 
 Bare `gg` / `gitgen` (no arguments) prints **help** — it does **not** open the app.
 
-### Install on PATH (once)
-
-Add the repo’s `scripts/` directory to your user `PATH`, then open a **new** terminal:
-
-```powershell
-# Windows (PowerShell) — adjust the clone path:
-[Environment]::SetEnvironmentVariable(
-  "Path",
-  $env:Path + ";H:\Python\Slop\git-command-generator\scripts",
-  "User"
-)
-```
-
-Without PATH, you can still run:
+### Install
 
 ```bash
-bun /path/to/git-command-generator/scripts/cli.ts <cmd> [args]
+npm install -g git-command-generator
+# update later:
+npm update -g git-command-generator
+# or:
+gitgen update
 ```
 
-Requires [Bun](https://bun.sh) on your `PATH`.
-
+From a clone (local PATH via `scripts/*.cmd` on Windows), run `npm run build:cli` once so `dist/cli.js` exists, then add `scripts/` to PATH if you want the wrappers.
 ### Open the web app
 
 ```bash
@@ -229,7 +213,7 @@ gg start
 | Server state | Behavior |
 |--------------|----------|
 | Already running on `localhost:2001` | Opens the browser with `?path=` for the current folder |
-| Offline | Starts `bun run dev` in the background, waits, then opens the browser |
+| Offline | Starts `npm run dev` in the background, waits, then opens the browser |
 
 Uses `scripts/open-here.ps1` (Windows) or `open-here.mjs` under the hood.
 
@@ -266,6 +250,9 @@ gg h                       # help
 | `gg sw <branch>` | `gitgen switch <branch>` | 06 Switch Branch | `git checkout <branch>` |
 | `gg r <url>` | `gitgen remote <url>` | 07 Add Remote | `git init` → `remote add origin` → first push to `main` |
 | `gg rs [file]` | `gitgen restore [file]` | 08 / 09 Restore | `git restore .` (or one file) — **destructive**, confirms first |
+| `gg setup` | `gitgen setup` | — | OpenRouter onboard (API key + model + language) |
+| `gg config` | `gitgen config` | — | Show / set user config (`config set model …`) |
+| `gg u` | `gitgen update` | — | Check npm registry and install latest |
 | `gg v` | `gitgen version` | — | Print installed version (`package.json`; also `--version` / `-V`) |
 | `gg h` | `gitgen help` | — | Show all commands (same as bare `gg`) |
 
@@ -274,17 +261,17 @@ gg h                       # help
 The CLI version is **`package.json` → `version`** (single source of truth via `lib/version.ts`).
 
 ```bash
-gitgen version          # or: gg v  ·  gitgen --version  ·  bun run version:show
+gitgen version          # or: gg v  ·  gitgen --version  ·  npm run version:show
 ```
 
 To release (updates `package.json` and prepends `CHANGELOG.md`):
 
 ```bash
-bun run version:patch   # 1.0.0 → 1.0.1
-bun run version:minor   # 1.0.0 → 1.1.0
-bun run version:major   # 1.0.0 → 2.0.0
+npm run version:patch   # 1.0.0 → 1.0.1
+npm run version:minor   # 1.0.0 → 1.1.0
+npm run version:major   # 1.0.0 → 2.0.0
 # optional note:
-bun scripts/bump-version.ts patch "fix restore confirm on Windows"
+npx tsx scripts/bump-version.ts patch "fix restore confirm on Windows"
 ```
 
 ### Flags, AI messages, progress
@@ -295,11 +282,11 @@ bun scripts/bump-version.ts patch "fix restore confirm on Windows"
 | `-y` / `--yes` | `restore` / `rs` | Skip the destructive confirmation prompt |
 
 - **AI messages:** omit `-m` and, if an API key is set in `.env.local`, the message is generated from your diff (same as the app). Without a key, a sensible default is used (`feat: update`, `wip: saving progress`, …).
-- **Provider env:** `AI_PROVIDER`, matching `*_API_KEY` / `*_MODEL`, and `COMMIT_LANGUAGE` from `.env.local`.
-- **Live progress:** each step shows a spinner with elapsed time and `✓`/`✗`. Pushes render a real progress bar from git’s transfer stats:
+- **AI config:** OpenRouter key/model from user config (`gitgen setup`) or `OPENROUTER_*` env. First AI use without a key runs setup interactively.
+- **Live progress:** each step is one short line (spinner + `✓`/`✗` + time). Labels stay compact (`git commit`, not the full `-m` text). Pushes show a small % bar only for transfer phases — no “Total N (delta…)” spam:
 
 ```text
-  ⠹ git push  [██████████████░░░░░░░░]  63% Writing objects  2.3s
+  ⠹ git push [████████░░░░░░]  63% Writing  2.3s
   ✓ git push  4.1s
 ```
 
@@ -311,7 +298,7 @@ bun scripts/bump-version.ts patch "fix restore confirm on Windows"
 | `GCG_TIMEOUT` | varies | How long to wait for the server to come up (seconds) |
 | `GCG_TTY` | — | Set by launchers so spinners work under PowerShell/cmd |
 
-Implementation: `scripts/cli.ts` (Bun). Launchers: `scripts/gg.cmd`, `gitgen.cmd`, `git-gen.cmd`.
+Implementation: `scripts/cli.ts` → `dist/cli.js` (Node). Package bins: `gitgen`, `gg`. Local launchers: `scripts/gg.cmd`, `gitgen.cmd`, `git-gen.cmd`.
 
 ---
 
@@ -398,8 +385,8 @@ LICENSE                         # non-commercial
 | Framework | Next.js 16 (App Router) |
 | UI | React 19, Tailwind CSS 4 |
 | Language | TypeScript 5 |
-| Runtime | Bun (Node-compatible) |
-| AI | OpenRouter Chat Completions / OpenAI Responses API |
+| Runtime | Node.js 18+ (CLI) · npm package manager |
+| AI | OpenRouter (CLI setup) · OpenRouter/OpenAI (web app) |
 
 ---
 

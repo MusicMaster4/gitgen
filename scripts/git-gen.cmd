@@ -1,10 +1,18 @@
 @echo off
-REM git-gen — alias de gitgen / gg
-REM   git-gen start             -> abre o app (pasta atual)
-REM   git-gen <comando> [args]  -> workflow no terminal
-REM   git-gen / git-gen help     -> lista de comandos
-REM Comandos: start · commit|c [push|p] · branch|b · merge|m · save|s · switch|sw · remote|r · restore|rs · version|v · help|h
+REM git-gen — alias of gitgen / gg (Node CLI)
 setlocal
 set "GCG_TTY=1"
-bun "%~dp0cli.ts" %*
+set "ROOT=%~dp0.."
+set "CLI=%ROOT%\dist\cli.js"
+if not exist "%CLI%" (
+  echo Building CLI ^(npm run build:cli^)...
+  pushd "%ROOT%"
+  call npm run build:cli
+  if errorlevel 1 (
+    popd
+    exit /b 1
+  )
+  popd
+)
+node "%CLI%" %*
 exit /b %errorlevel%

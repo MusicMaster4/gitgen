@@ -1,26 +1,48 @@
 /**
  * App/CLI version — single source of truth is package.json "version".
- * Import this (or call getVersion) anywhere that needs to display the release.
+ * Works from lib/ (dev) and dist/ (published bin): package.json is always one level up.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const packageJsonPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+function packageJsonPathFrom(moduleUrl: string): string {
+  return join(dirname(fileURLToPath(moduleUrl)), "..", "package.json");
+}
 
-let cached: string | undefined;
+const packageJsonPath = packageJsonPathFrom(import.meta.url);
+
+type Pkg = { version?: string; name?: string };
+
+function readPkg(): Pkg {
+  try {
+    return JSON.parse(readFileSync(packageJsonPath, "utf8")) as Pkg;
+  } catch {
+    return {};
+  }
+}
+
+let cachedVersion: string | undefined;
+let cachedName: string | undefined;
 
 /** Semver string from package.json (e.g. "1.0.0"). Cached after first read. */
 export function getVersion(): string {
-  if (cached) return cached;
-  try {
-    const raw = readFileSync(packageJsonPath, "utf8");
-    const pkg = JSON.parse(raw) as { version?: string };
-    cached = (pkg.version || "0.0.0").trim() || "0.0.0";
-  } catch {
-    cached = "0.0.0";
-  }
-  return cached;
+  if (cachedVersion) return cachedVersion;
+  cachedVersion = (readPkg().version || "0.0.0").trim() || "0.0.0";
+  return cachedVersion;
+}
+
+/** npm package name used for publish / `gitgen update`. */
+export function getPackageName(): string {
+  if (cachedName) return cachedName;
+  cachedName = (readPkg().name || "git-command-generator").trim() || "git-command-generator";
+  return cachedName;
+}
+
+/** Reset caches (tests only). */
+export function _resetVersionCacheForTests(): void {
+  cachedVersion = undefined;
+  cachedName = undefined;
 }
 
 /** Name used in CLI banners / --version output. */

@@ -1,6 +1,6 @@
 # Git Command Generator - tray (bandeja)
 #
-# Sobe o server (bun run dev) em segundo plano, SEM janela, e coloca um icone
+# Sobe o server (npm run dev) em segundo plano, SEM janela, e coloca um icone
 # perto do relogio. Menu do icone: Abrir / Ver logs / Reiniciar / Encerrar.
 #
 # Instancia unica: se ja houver uma bandeja rodando, este processo sai sozinho.
@@ -47,11 +47,11 @@ function Stop-ServerOnPort([int]$p) {
   } catch {}
 }
 
-# Sobe o bun run dev escondido, com log combinado. Devolve o Process (cmd host).
+# Sobe o npm run dev escondido, com log combinado. Devolve o Process (cmd host).
 function Start-Server {
   if (Test-ServerReady $portNum) { return $null }  # ja de pe: nao sobe outro
   New-Item -ItemType Directory -Force -Path (Split-Path $logPath) | Out-Null
-  $cmdLine = 'cd /d "' + $repoRoot + '" && bun run dev > "' + $logPath + '" 2>&1'
+  $cmdLine = 'cd /d "' + $repoRoot + '" && npm run dev > "' + $logPath + '" 2>&1'
   return Start-Process cmd.exe -ArgumentList '/c', $cmdLine -WindowStyle Hidden -PassThru
 }
 

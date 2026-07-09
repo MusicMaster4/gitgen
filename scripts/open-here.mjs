@@ -4,8 +4,8 @@
  * Se o server estiver offline, sobe em outra janela e espera ficar pronto.
  *
  * Uso (de qualquer projeto):
- *   bun /caminho/para/git-command-generator/scripts/open-here.mjs
- *   node /caminho/para/git-command-generator/scripts/open-here.mjs
+ *   node /path/to/git-command-generator/scripts/open-here.mjs
+ *   npm run here
  */
 import { spawn } from "node:child_process";
 import { createConnection } from "node:net";
@@ -68,17 +68,18 @@ function startServerWindow() {
     const title = `Git Command Generator - Server :${port}`;
     spawn(
       "cmd.exe",
-      ["/k", `title ${title} && cd /d "${repoRoot}" && bun run dev`],
+      ["/k", `title ${title} && cd /d "${repoRoot}" && npm run dev`],
       { cwd: repoRoot, detached: true, stdio: "ignore" },
     ).unref();
     return;
   }
-  // fallback: background process (sem janela dedicada em Unix)
-  const child = spawn("bun", ["run", "dev"], {
+  // fallback: background process (no dedicated window on Unix)
+  const child = spawn("npm", ["run", "dev"], {
     cwd: repoRoot,
     detached: true,
     stdio: "ignore",
     env: process.env,
+    shell: true,
   });
   child.unref();
 }
@@ -91,7 +92,7 @@ console.log(`  url    : ${url}`);
 if (await testServerReady(portNum)) {
   console.log(`  server : ja rodando na porta ${port}`);
 } else {
-  console.log("  server : offline — subindo (bun run dev)...");
+  console.log("  server : offline — starting (npm run dev)...");
   if (!existsSync(join(repoRoot, "package.json"))) {
     console.error(`Nao achei o app em: ${repoRoot}`);
     process.exit(1);
