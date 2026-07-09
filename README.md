@@ -285,8 +285,8 @@ First AI use without a key launches the setup wizard automatically.
 The package is **CLI-first**. There is also a local Next.js UI if you clone the full repo.
 
 ```bash
-git clone https://github.com/MusicMaster4/git-command-generator.git
-cd git-command-generator
+git clone https://github.com/MusicMaster4/gitgen.git
+cd gitgen
 npm install
 npm run dev          # http://localhost:2001
 ```
