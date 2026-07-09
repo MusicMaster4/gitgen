@@ -54,7 +54,7 @@ Write-Host "  url    : $url"
 if (Test-ServerReady $portNum) {
   Write-Host "  server : ja rodando na porta $Port"
 } else {
-  Write-Host "  server : offline - abrindo nova janela CMD (bun run dev)..."
+  Write-Host "  server : offline - subindo em segundo plano (icone na bandeja)..."
 
   if (-not (Test-Path (Join-Path $repoRoot "package.json"))) {
     Write-Error "Nao achei o app em: $repoRoot"
@@ -67,10 +67,11 @@ if (Test-ServerReady $portNum) {
     exit 1
   }
 
-  # Janela separada com o log do Next (como o start-dev.bat)
-  # Usa & do cmd.exe (evita problemas de aspas no PowerShell 5.1)
-  $cmdArgs = '/k title Git Command Generator - Server :' + $Port + ' & cd /d "' + $repoRoot + '" & bun run dev'
-  Start-Process -FilePath "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $repoRoot
+  # Sobe a bandeja (tray.vbs esconde tudo). O tray.ps1 sobe o bun run dev
+  # oculto e coloca o icone perto do relogio (menu: Abrir / Logs / Encerrar).
+  $env:GCG_PORT = $Port
+  $vbs = Join-Path $PSScriptRoot "tray.vbs"
+  Start-Process -FilePath "wscript.exe" -ArgumentList ('"' + $vbs + '"')
 
   Write-Host "  server : aguardando porta $Port (ate $TimeoutSec s)..."
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
