@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import {
   DEFAULT_OPENROUTER_MODEL,
   getConfigDir,
   getConfigPath,
   loadConfig,
+  looksLikeOpenRouterKey,
   maskApiKey,
   parseConfigJson,
   resolveRuntimeSettings,
@@ -102,6 +104,29 @@ describe("parseConfigJson / loadConfig / saveConfig", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("writes the secret config with owner-only 0600 permissions", { skip: process.platform === "win32" }, () => {
+    const dir = mkdtempSync(join(tmpdir(), "gitgen-cfg-"));
+    const path = join(dir, "config.json");
+    try {
+      saveConfig({ openRouterApiKey: "sk-or-secret" }, path);
+      // Low 9 permission bits should be rw------- (0600).
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("looksLikeOpenRouterKey", () => {
+  it("accepts real-looking OpenRouter keys", () => {
+    assert.equal(looksLikeOpenRouterKey("sk-or-v1-a38a25fda52cb3601a574822743153a3"), true);
+  });
+  it("rejects empty, short, or wrong-prefix keys", () => {
+    assert.equal(looksLikeOpenRouterKey(""), false);
+    assert.equal(looksLikeOpenRouterKey("sk-or-123"), false);
+    assert.equal(looksLikeOpenRouterKey("sk-proj-abcdefghijklmnop"), false);
   });
 });
 

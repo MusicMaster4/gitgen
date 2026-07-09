@@ -2,7 +2,7 @@
  * User-level gitgen config (OpenRouter key, model, language).
  * Pure path/IO helpers — safe to unit-test with temp dirs and env stubs.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type CommitLanguage = "en" | "pt";
@@ -78,13 +78,33 @@ export function loadConfig(configPath: string): GitgenConfig {
 
 export function saveConfig(config: GitgenConfig, configPath: string): void {
   const dir = dirname(configPath);
-  mkdirSync(dir, { recursive: true });
+  // 0700: only the owner may enter the config dir (no-op on Windows ACLs).
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const payload: GitgenConfig = {
     openRouterApiKey: config.openRouterApiKey?.trim() || undefined,
     model: (config.model?.trim() || DEFAULT_OPENROUTER_MODEL) as string,
     language: config.language === "pt" ? "pt" : "en",
   };
-  writeFileSync(configPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  // 0600: the file holds a secret API key — keep it readable by the owner only.
+  writeFileSync(configPath, JSON.stringify(payload, null, 2) + "\n", {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  // writeFileSync's mode only applies when creating the file; enforce on rewrite too.
+  try {
+    chmodSync(configPath, 0o600);
+  } catch {
+    // Windows / exotic FS may reject chmod — the ACL default is already owner-scoped.
+  }
+}
+
+/**
+ * Light sanity check for an OpenRouter key. Not a security control — just a
+ * typo guard so onboarding can warn before saving something obviously wrong.
+ */
+export function looksLikeOpenRouterKey(key: string): boolean {
+  const k = key.trim();
+  return k.startsWith("sk-or-") && k.length >= 20;
 }
 
 /** Mask API key for display (keep last 4 chars). */
