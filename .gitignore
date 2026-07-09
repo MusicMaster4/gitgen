@@ -1,0 +1,62 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# debug / logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# env files — never commit real keys (.env.example is the safe template)
+.env
+.env.*
+!.env.example
+
+# backups / local tooling / session junk
+*.bak
+*.tmp
+*.swp
+*~
+/terminals/
+/mcps/
+.grok/
+.cursor/
+.claude/
+.codex/
+.vscode/*
+!.vscode/extensions.json
+.idea
+Thumbs.db
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# OS / secrets dumps
+*.secret
+secrets/
+credentials/

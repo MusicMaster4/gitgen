@@ -1,0 +1,986 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Git Command Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f0f0f;
+      --surface:  #181818;
+      --border:   #2e2e2e;
+      --accent:   #c8ff00;
+      --blue:     #3db8ff;
+      --red:      #ff4040;
+      --orange:   #ff8c00;
+      --text:     #f0f0f0;
+      --muted:    #555;
+      --shadow:   4px 4px 0px #c8ff00;
+      --shadow-b: 4px 4px 0px #3db8ff;
+      --shadow-r: 4px 4px 0px #ff4040;
+      --shadow-o: 4px 4px 0px #ff8c00;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px);
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .wrapper {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header {
+      border: 2px solid var(--border);
+      padding: 28px 28px 24px;
+      margin-bottom: 40px;
+      position: relative;
+      background: var(--surface);
+      box-shadow: 6px 6px 0 var(--accent);
+    }
+
+    .header-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: .65rem;
+      color: var(--accent);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      font-weight: 900;
+      letter-spacing: -.04em;
+      line-height: 1;
+      color: #fff;
+    }
+
+    h1 span { color: var(--accent); }
+
+    .subtitle {
+      margin-top: 10px;
+      font-size: .875rem;
+      color: var(--muted);
+    }
+
+    .header-corner {
+      position: absolute;
+      top: 16px; right: 20px;
+      font-family: 'Space Mono', monospace;
+      font-size: .6rem;
+      color: var(--muted);
+      letter-spacing: .08em;
+    }
+
+    /* ── Section separator ── */
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 4px;
+    }
+
+    .section-header::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .section-label {
+      font-family: 'Space Mono', monospace;
+      font-size: .6rem;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: #333;
+      white-space: nowrap;
+    }
+
+    .section-label .dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      margin-right: 7px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+
+    .dot-green  { background: var(--accent); }
+    .dot-blue   { background: var(--blue); }
+    .dot-yellow { background: var(--orange); }
+    .dot-red    { background: var(--red); }
+
+    /* ── Card ── */
+    .card {
+      position: relative;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      transition: box-shadow .12s ease, border-color .12s ease;
+    }
+
+    .card:focus-within               { border-color: var(--accent); box-shadow: var(--shadow); }
+    .card.blue:focus-within          { border-color: var(--blue);   box-shadow: var(--shadow-b); }
+    .card.danger:focus-within        { border-color: var(--red);    box-shadow: var(--shadow-r); }
+    .card.warning:focus-within       { border-color: var(--orange); box-shadow: var(--shadow-o); }
+
+    /* left accent bar */
+    .card::before {
+      content: '';
+      display: block;
+      width: 3px;
+      height: 0;
+      position: absolute;
+      left: -2px; top: -2px;
+      transition: height .2s ease;
+      background: var(--accent);
+    }
+
+    .card:focus-within::before        { height: calc(100% + 4px); }
+    .card.blue::before                { background: var(--blue); }
+    .card.danger::before              { background: var(--red); }
+    .card.warning::before             { background: var(--orange); }
+
+    .card-header {
+      padding: 13px 20px;
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      font-family: 'Space Mono', monospace;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .card-sub {
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      color: var(--muted);
+    }
+
+    .card-body {
+      padding: 18px 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    @media (max-width: 600px) {
+      .card-body { grid-template-columns: 1fr; }
+    }
+
+    /* ── Warning banner ── */
+    .warn-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      background: rgba(255,64,64,.07);
+      border: 1px solid rgba(255,64,64,.2);
+      margin-bottom: 14px;
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      color: var(--red);
+      letter-spacing: .05em;
+      line-height: 1.5;
+    }
+
+    .warn-icon { flex-shrink: 0; }
+
+    /* ── Labels ── */
+    label {
+      display: block;
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .label-hint {
+      font-size: .5rem;
+      color: #2e2e2e;
+      letter-spacing: .04em;
+      text-transform: none;
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── Inputs ── */
+    input[type="text"],
+    input[type="url"] {
+      width: 100%;
+      padding: 10px 13px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .875rem;
+      font-weight: 500;
+      outline: none;
+      border-radius: 0;
+      transition: border-color .12s;
+    }
+
+    input:focus { border-color: var(--accent); }
+    input::placeholder { color: #2e2e2e; }
+
+    .blue input:focus    { border-color: var(--blue); }
+    .danger input:focus  { border-color: var(--red); }
+    .warning input:focus { border-color: var(--orange); }
+
+    .input-stack { display: flex; flex-direction: column; gap: 12px; }
+
+    /* ── Static command pill ── */
+    .static-cmd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 13px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+    }
+
+    .static-cmd code {
+      font-family: 'Space Mono', monospace;
+      font-size: .7rem;
+      color: var(--orange);
+    }
+
+    .btn-copy-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--orange);
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background .1s, border-color .1s, box-shadow .1s, transform .06s;
+    }
+
+    .btn-copy-inline:hover  { border-color: var(--orange); background: rgba(255,140,0,.08); box-shadow: 1px 1px 0 var(--orange); }
+    .btn-copy-inline:active { transform: translate(1px,1px); box-shadow: none; }
+    .btn-copy-inline svg    { width: 10px; height: 10px; }
+
+    /* ── Copy buttons ── */
+    .copy-row {
+      margin-top: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-copy {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      background: var(--accent);
+      border: 2px solid var(--accent);
+      color: #000;
+      font-family: 'Space Mono', monospace;
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 0;
+      white-space: nowrap;
+      transition: background .1s, color .1s, transform .06s, box-shadow .1s;
+    }
+
+    .btn-copy:hover    { background: #000; color: var(--accent); box-shadow: 2px 2px 0 var(--accent); }
+    .btn-copy:active   { transform: translate(2px,2px); box-shadow: none; }
+    .btn-copy svg      { width: 11px; height: 11px; flex-shrink: 0; }
+
+    .blue .btn-copy    { background: var(--blue);   border-color: var(--blue);   color: #000; }
+    .blue .btn-copy:hover { background: #000; color: var(--blue); box-shadow: 2px 2px 0 var(--blue); }
+
+    .danger .btn-copy  { background: var(--red);    border-color: var(--red);    color: #fff; }
+    .danger .btn-copy:hover { background: #000; color: var(--red); box-shadow: 2px 2px 0 var(--red); }
+
+    .warning .btn-copy { background: var(--orange); border-color: var(--orange); color: #000; }
+    .warning .btn-copy:hover { background: #000; color: var(--orange); box-shadow: 2px 2px 0 var(--orange); }
+
+    .btn-copy.secondary {
+      background: transparent;
+      color: var(--accent);
+      border-color: var(--border);
+    }
+    .btn-copy.secondary:hover { border-color: var(--accent); box-shadow: 2px 2px 0 var(--accent); color: var(--accent); background: rgba(200,255,0,.06); }
+
+    .danger .btn-copy.secondary  { color: var(--red); }
+    .danger .btn-copy.secondary:hover { border-color: var(--red); box-shadow: 2px 2px 0 var(--red); background: rgba(255,64,64,.06); }
+
+    .copied-badge {
+      font-family: 'Space Mono', monospace;
+      font-size: .6rem;
+      letter-spacing: .08em;
+      color: var(--accent);
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity .18s, transform .18s;
+      pointer-events: none;
+    }
+
+    .copied-badge.visible { opacity: 1; transform: translateX(0); }
+    .blue .copied-badge    { color: var(--blue); }
+    .danger .copied-badge  { color: var(--red); }
+    .warning .copied-badge { color: var(--orange); }
+
+    /* ── Textarea ── */
+    textarea {
+      width: 100%;
+      padding: 12px 13px;
+      background: var(--bg);
+      border: 2px solid var(--border);
+      color: var(--accent);
+      font-family: 'Space Mono', monospace;
+      font-size: .68rem;
+      line-height: 1.8;
+      resize: none;
+      outline: none;
+      border-radius: 0;
+    }
+
+    .blue textarea    { color: var(--blue); }
+    .danger textarea  { color: var(--red); }
+    .warning textarea { color: var(--orange); }
+    textarea:focus    { border-color: #333; }
+
+    .out-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .out-label-row label { margin-bottom: 0; }
+
+    /* ── Validation ── */
+    input.input-error {
+      border-color: var(--red) !important;
+      animation: shake .25s ease;
+    }
+
+    .field-error-msg {
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      color: var(--red);
+      letter-spacing: .05em;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .field-error-msg.visible { display: block; }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25%      { transform: translateX(-5px); }
+      75%      { transform: translateX(5px); }
+    }
+
+    /* ── Collapsible sections ── */
+    .section-header {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .section-header:hover .section-label { color: #555; }
+
+    .section-toggle {
+      font-family: 'Space Mono', monospace;
+      font-size: .58rem;
+      color: #333;
+      letter-spacing: .08em;
+      margin-left: 10px;
+      transition: color .15s;
+      flex-shrink: 0;
+    }
+
+    .section-header:hover .section-toggle { color: var(--muted); }
+
+    .section-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .section-content.collapsed {
+      display: none !important;
+    }
+
+    @media (max-width: 720px) {
+      .section-content { grid-template-columns: 1fr; }
+    }
+
+    /* ── Helper cmd block (branch name) ── */
+    .helper-block {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .helper-block label {
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <header>
+      <div class="header-tag">// git command generator</div>
+      <h1>GIT <span>CMD</span><br>GENERATOR</h1>
+      <p class="subtitle">Escreve, o comando aparece. Sem frescura.</p>
+      <div class="header-corner">v4.0 / DARK</div>
+    </header>
+
+    <!-- ════════════════════════════════════════
+         SEÇÃO 1 — COMMITS
+    ═════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection('s3')" title="Mostrar/esconder">
+        <span class="section-label"><span class="dot dot-green"></span>Commits</span>
+        <span class="section-toggle" id="toggle-s3">[ − ]</span>
+      </div>
+
+      <div class="section-content" id="s3">
+      <!-- 04 Commit + Push -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">01 — Commit + Push</span>
+          <span class="card-sub">git add . → commit → push</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <label for="pushMsg">Mensagem do commit</label>
+            <input id="pushMsg" type="text" placeholder="<mensagem>" autocomplete="off" spellcheck="false" />
+            <div class="copy-row">
+              <button class="btn-copy" id="copyPush">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copied-badge" id="copiedPush">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Saída</label></div>
+            <textarea id="outPush" rows="6" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 Só Commit -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">02 — Só Commit (sem push)</span>
+          <span class="card-sub">git add . → commit</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <label for="commitOnlyMsg">Mensagem do commit</label>
+            <input id="commitOnlyMsg" type="text" placeholder="<mensagem>" autocomplete="off" spellcheck="false" />
+            <div class="copy-row">
+              <button class="btn-copy" id="copyCommitOnly">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copied-badge" id="copiedCommitOnly">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Saída</label></div>
+            <textarea id="outCommitOnly" rows="5" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+      </div><!-- /section-content s3 -->
+    </div>
+
+    <!-- ════════════════════════════════════════
+         SEÇÃO 2 — BRANCHES
+    ═════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection('s2')" title="Mostrar/esconder">
+        <span class="section-label"><span class="dot dot-green"></span>Branches</span>
+        <span class="section-toggle" id="toggle-s2">[ − ]</span>
+      </div>
+
+      <div class="section-content" id="s2">
+      <!-- 02 Criar Branch -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">03 — Criar Branch</span>
+          <span class="card-sub">checkout -b → desenvolver → commit → push</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="input-stack">
+              <div>
+                <label for="branch">Nome do branch</label>
+                <input id="branch" type="text" placeholder="<branch>" autocomplete="off" spellcheck="false" />
+                <span class="field-error-msg" id="errBranch">⚠ Nome do branch obrigatório</span>
+              </div>
+              <div>
+                <label for="branchMsg">Mensagem do commit <span class="label-hint">(opcional)</span></label>
+                <input id="branchMsg" type="text" placeholder="ex.: feat: initial commit" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyBranch">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar tudo
+              </button>
+              <span class="copied-badge" id="copiedBranch">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Sequência completa</label></div>
+            <textarea id="outBranch" rows="6" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 Merge com main -->
+      <div class="card warning">
+        <div class="card-header">
+          <span class="card-title">04 — Merge com Main</span>
+          <span class="card-sub">commit → checkout main → merge → push</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="input-stack">
+              <div>
+                <label for="mergeBranch">Seu branch atual</label>
+                <input id="mergeBranch" type="text" placeholder="<branch>  ex.: feature/login" autocomplete="off" spellcheck="false" />
+                <span class="field-error-msg" id="errMergeBranch">⚠ Nome do branch obrigatório</span>
+              </div>
+              <div>
+                <label for="mergeMsg">Mensagem do commit <span class="label-hint">(opcional)</span></label>
+                <input id="mergeMsg" type="text" placeholder="ex.: feat: finaliza login" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyMerge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar tudo
+              </button>
+              <span class="copied-badge" id="copiedMerge">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Sequência completa</label></div>
+            <textarea id="outMerge" rows="6" spellcheck="false" readonly></textarea>
+            <div class="helper-block">
+              <label>Não sabe o nome do branch? Rode isso primeiro:</label>
+              <div class="static-cmd">
+                <code>git branch --show-current</code>
+                <button class="btn-copy-inline" id="copyShowBranch">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  Copiar
+                </button>
+              </div>
+              <span class="copied-badge" id="copiedShowBranch" style="display:block;margin-top:6px;">✓ copiado</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 Salvar estado e voltar ao main -->
+      <div class="card warning">
+        <div class="card-header">
+          <span class="card-title">05 — Salvar Estado e Voltar ao Main</span>
+          <span class="card-sub">add → commit → checkout main</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <label for="stashMsg">Mensagem do commit <span class="label-hint">(opcional)</span></label>
+            <input id="stashMsg" type="text" placeholder="ex.: wip: pausando login" autocomplete="off" spellcheck="false" />
+            <p style="font-size:.75rem;color:#444;line-height:1.6;margin-top:10px;">Faz um commit no branch atual salvando o estado, depois volta pro <code style="color:#666;font-family:'Space Mono',monospace;font-size:.7rem;">main</code>. Para retomar, basta dar <code style="color:#666;font-family:'Space Mono',monospace;font-size:.7rem;">git checkout &lt;branch&gt;</code> de novo.</p>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyStash">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar tudo
+              </button>
+              <span class="copied-badge" id="copiedStash">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Sequência completa</label></div>
+            <textarea id="outStash" rows="6" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 Mudar de Branch -->
+      <div class="card warning">
+        <div class="card-header">
+          <span class="card-title">06 — Mudar de Branch</span>
+          <span class="card-sub">git checkout &lt;branch&gt;</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <label for="checkoutBranch">Nome do branch de destino</label>
+            <input id="checkoutBranch" type="text" placeholder="<branch>  ex.: main, feature/login" autocomplete="off" spellcheck="false" />
+            <p style="font-size:.75rem;color:#444;line-height:1.6;margin-top:10px;">Muda para qualquer branch existente. Use também para retomar um branch onde você salvou o estado anteriormente.</p>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyCheckout">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copied-badge" id="copiedCheckout">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Saída</label></div>
+            <textarea id="outCheckout" rows="3" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+      </div><!-- /section-content s2 -->
+    </div>
+
+    <!-- ════════════════════════════════════════
+         SEÇÃO 3 — CONFIGURAR REPOSITÓRIO
+    ═════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection('s1')" title="Mostrar/esconder">
+        <span class="section-label"><span class="dot dot-blue"></span>Configurar Repositório</span>
+        <span class="section-toggle" id="toggle-s1">[ − ]</span>
+      </div>
+
+      <div class="section-content" id="s1" style="grid-template-columns: 1fr;">
+      <!-- 01 Adicionar Remote -->
+      <div class="card blue">
+        <div class="card-header">
+          <span class="card-title">07 — Adicionar Remote (origin)</span>
+          <span class="card-sub">git init → remote add → primeiro push</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="input-stack">
+              <div>
+                <label for="repo">URL do repositório</label>
+                <input id="repo" type="url" placeholder="<repo_url>" autocomplete="off" spellcheck="false" />
+                <span class="field-error-msg" id="errRepo">⚠ URL obrigatória para copiar</span>
+              </div>
+              <div>
+                <label for="linkMsg">Mensagem do commit <span class="label-hint">(opcional)</span></label>
+                <input id="linkMsg" type="text" placeholder="ex.: chore: commit inicial" autocomplete="off" spellcheck="false" />
+              </div>
+            </div>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyLink">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar tudo
+              </button>
+              <span class="copied-badge" id="copiedLink">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Sequência completa</label></div>
+            <textarea id="outLink" rows="6" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+      </div><!-- /section-content s1 -->
+    </div>
+
+    <!-- ════════════════════════════════════════
+         SEÇÃO 4 — DESFAZER MUDANÇAS
+    ═════════════════════════════════════════ -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection('s4')" title="Mostrar/esconder">
+        <span class="section-label"><span class="dot dot-red"></span>Desfazer Mudanças</span>
+        <span class="section-toggle" id="toggle-s4">[ − ]</span>
+      </div>
+
+      <div class="section-content" id="s4">
+      <!-- 06 Restaurar todos os arquivos -->
+      <div class="card danger">
+        <div class="card-header">
+          <span class="card-title">08 — Restaurar Todos os Arquivos</span>
+          <span class="card-sub">git restore .</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="warn-banner">
+              <span class="warn-icon">⚠</span>
+              Destrutivo — descarta TODAS as mudanças não commitadas. Não tem desfazer.
+            </div>
+            <p style="font-size:.8rem;color:#444;line-height:1.6;">Restaura todos os arquivos rastreados ao estado do último commit.</p>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyRestoreAll">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copied-badge" id="copiedRestoreAll">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Saída</label></div>
+            <textarea id="outRestoreAll" rows="3" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 07 Restaurar arquivo específico -->
+      <div class="card danger">
+        <div class="card-header">
+          <span class="card-title">09 — Restaurar Arquivo Específico</span>
+          <span class="card-sub">git restore &lt;arquivo&gt;</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <div class="warn-banner">
+              <span class="warn-icon">⚠</span>
+              Destrutivo — descarta as mudanças do arquivo indicado. Não tem desfazer.
+            </div>
+            <label for="restoreFile">Caminho do arquivo</label>
+            <input id="restoreFile" type="text" placeholder="<arquivo>  ex.: src/index.js" autocomplete="off" spellcheck="false" />
+            <span class="field-error-msg" id="errRestoreFile">⚠ Caminho do arquivo obrigatório</span>
+            <div class="copy-row">
+              <button class="btn-copy" id="copyRestoreFile">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copiar
+              </button>
+              <span class="copied-badge" id="copiedRestoreFile">✓ copiado</span>
+            </div>
+          </div>
+          <div>
+            <div class="out-label-row"><label>Saída</label></div>
+            <textarea id="outRestoreFile" rows="3" spellcheck="false" readonly></textarea>
+          </div>
+        </div>
+      </div>
+      </div><!-- /section-content s4 -->
+    </div>
+
+  </div><!-- /wrapper -->
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function normalizeBranch(v) {
+      return (v || "").replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+    }
+
+    async function copyText(text, badgeId) {
+      try { await navigator.clipboard.writeText(text); }
+      catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+      const badge = $(badgeId);
+      badge.classList.add('visible');
+      setTimeout(() => badge.classList.remove('visible'), 1500);
+    }
+
+    /* ── 01 Remote ── */
+    function buildLink() {
+      const url = ($("repo").value || "").trim() || "<repo_url>";
+      const msg = ($("linkMsg").value || "").trim() || "chore: commit inicial";
+      $("outLink").value = [
+        `git init`,
+        `git remote add origin ${url}`,
+        `git add .`,
+        `git commit -m "${msg}"`,
+        `git branch -M main`,
+        `git push -u origin main`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 02 Branch ── */
+    function buildBranch() {
+      const curr = $("branch").value || "";
+      const norm = normalizeBranch(curr);
+      if (curr !== norm) $("branch").value = norm;
+      const b = norm.trim() || "<branch>";
+      const msg = ($("branchMsg").value || "").trim() || "feat: novo branch";
+      $("outBranch").value = [
+        `git checkout -b ${b}`,
+        `git add .`,
+        `git commit -m "${msg}"`,
+        `git push -u origin ${b}`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 03 Merge ── */
+    function buildMerge() {
+      const curr = $("mergeBranch").value || "";
+      const norm = normalizeBranch(curr);
+      if (curr !== norm) $("mergeBranch").value = norm;
+      const b = norm.trim() || "<branch>";
+      const msg = ($("mergeMsg").value || "").trim() || `merge: integrando ${b} na main`;
+      $("outMerge").value = [
+        `git add .`,
+        `git commit -m "${msg}"`,
+        `git checkout main`,
+        `git merge ${b}`,
+        `git push`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 05 Mudar de branch ── */
+    function buildCheckout() {
+      const curr = $("checkoutBranch").value || "";
+      const norm = normalizeBranch(curr);
+      if (curr !== norm) $("checkoutBranch").value = norm;
+      const b = norm.trim() || "<branch>";
+      $("outCheckout").value = `git checkout ${b}
+`;
+    }
+
+    /* ── 04 Salvar e voltar ao main ── */
+    function buildStash() {
+      const msg = ($("stashMsg").value || "").trim() || "wip: salvando progresso";
+      $("outStash").value = [
+        `git add .`,
+        `git commit -m "${msg}"`,
+        `git checkout main`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 04 Commit + Push ── */
+    function buildPush() {
+      const msg = ($("pushMsg").value || "").trim() || "feat: atualização";
+      $("outPush").value = [
+        `git add .`,
+        `git commit -m "${msg}"`,
+        `git push`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 05 Só Commit ── */
+    function buildCommitOnly() {
+      const msg = ($("commitOnlyMsg").value || "").trim() || "feat: salvando progresso";
+      $("outCommitOnly").value = [
+        `git add .`,
+        `git commit -m "${msg}"`,
+      ].join("\n") + "\n";
+    }
+
+    /* ── 06 Restore all ── */
+    function buildRestoreAll() {
+      $("outRestoreAll").value = `git restore .\n`;
+    }
+
+    /* ── 07 Restore file ── */
+    function buildRestoreFile() {
+      const f = ($("restoreFile").value || "").trim() || "<arquivo>";
+      $("outRestoreFile").value = `git restore ${f}\n`;
+    }
+
+    /* ── Listeners ── */
+    $("repo").addEventListener("input", buildLink);
+    $("linkMsg").addEventListener("input", buildLink);
+    $("branch").addEventListener("input", buildBranch);
+    $("branchMsg").addEventListener("input", buildBranch);
+    $("mergeBranch").addEventListener("input", buildMerge);
+    $("mergeMsg").addEventListener("input", buildMerge);
+    $("stashMsg").addEventListener("input", buildStash);
+    $("checkoutBranch").addEventListener("input", buildCheckout);
+    $("pushMsg").addEventListener("input", buildPush);
+    $("commitOnlyMsg").addEventListener("input", buildCommitOnly);
+    $("restoreFile").addEventListener("input", buildRestoreFile);
+
+    function flashError(inputId, msgId) {
+      const inp = $(inputId);
+      const msg = $(msgId);
+      inp.classList.remove("input-error");
+      void inp.offsetWidth; // reflow to restart animation
+      inp.classList.add("input-error");
+      msg.classList.add("visible");
+      inp.addEventListener("input", () => {
+        inp.classList.remove("input-error");
+        msg.classList.remove("visible");
+      }, { once: true });
+    }
+
+    $("copyLink").addEventListener("click", () => {
+      if (!$("repo").value.trim()) { flashError("repo", "errRepo"); return; }
+      copyText($("outLink").value, "copiedLink");
+    });
+
+    $("copyBranch").addEventListener("click", () => {
+      if (!$("branch").value.trim()) { flashError("branch", "errBranch"); return; }
+      copyText($("outBranch").value, "copiedBranch");
+    });
+
+    $("copyMerge").addEventListener("click", () => {
+      if (!$("mergeBranch").value.trim()) { flashError("mergeBranch", "errMergeBranch"); return; }
+      copyText($("outMerge").value, "copiedMerge");
+    });
+
+    $("copyShowBranch").addEventListener("click",  () => copyText("git branch --show-current", "copiedShowBranch"));
+
+    $("copyStash").addEventListener("click",    () => copyText($("outStash").value,  "copiedStash"));
+    $("copyCheckout").addEventListener("click",   () => copyText($("outCheckout").value,        "copiedCheckout"));
+    $("copyPush").addEventListener("click",        () => copyText($("outPush").value,       "copiedPush"));
+    $("copyCommitOnly").addEventListener("click",  () => copyText($("outCommitOnly").value, "copiedCommitOnly"));
+    $("copyRestoreAll").addEventListener("click",  () => copyText($("outRestoreAll").value, "copiedRestoreAll"));
+
+    $("copyRestoreFile").addEventListener("click", () => {
+      if (!$("restoreFile").value.trim()) { flashError("restoreFile", "errRestoreFile"); return; }
+      copyText($("outRestoreFile").value, "copiedRestoreFile");
+    });
+
+    /* ── Toggle sections ── */
+    function toggleSection(id) {
+      const content = document.getElementById(id);
+      const toggle  = document.getElementById('toggle-' + id);
+      const collapsed = content.classList.toggle('collapsed');
+      toggle.textContent = collapsed ? '[ + ]' : '[ − ]';
+    }
+
+    /* ── Init ── */
+    buildLink(); buildBranch(); buildMerge(); buildStash(); buildCheckout(); buildPush(); buildCommitOnly(); buildRestoreAll(); buildRestoreFile();
+  </script>
+</body>
+</html>
