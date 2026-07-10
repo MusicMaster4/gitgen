@@ -71,6 +71,7 @@ import {
   npmGlobalInstallCommand,
   parseNpmLatestVersion,
 } from "../lib/update-check";
+import { sanitizeBranchName } from "../lib/branch-name";
 import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 import { c, header, row, sym, visibleLength } from "../lib/ui";
 
@@ -114,6 +115,17 @@ function die(msg: string): never {
 }
 function warn(msg: string) {
   log(`  ${sym.warn} ${c.yellow(msg)}`);
+}
+/** Apply branch-name rules; log when the CLI auto-corrected user input. */
+function resolveBranchName(raw: string, label = "branch name"): string {
+  const trimmed = (raw || "").trim();
+  if (!trimmed) die(`${label} required`);
+  const name = sanitizeBranchName(trimmed);
+  if (!name) die(`${label} invalid after sanitization — use letters, numbers, hyphens, or slashes`);
+  if (name !== trimmed) {
+    log(`  ${sym.info} ${c.dim("corrected")} ${c.dim(trimmed)} ${c.dim("→")} ${c.bold(name)}`);
+  }
+  return name;
 }
 /** Command banner: bold action title + the folder it runs in. */
 function banner(action: string) {
@@ -1186,8 +1198,7 @@ async function main() {
     }
 
     case "branch": {
-      const name = arg1;
-      if (!name) die('branch name required — e.g. gg b feature/login  (or gitgen branch feature/login)');
+      const name = resolveBranchName(arg1 || "", "branch name");
       banner(`create branch ${name}`);
       const dirty = await hasChanges();
       await runSteps(async () => {
@@ -1205,9 +1216,8 @@ async function main() {
     }
 
     case "merge": {
-      const source = arg1;
-      if (!source) die('branch name required — e.g. gg m feature/login [target]');
-      const target = arg2 || "main";
+      const source = resolveBranchName(arg1 || "", "source branch");
+      const target = arg2 ? resolveBranchName(arg2, "target branch") : "main";
       banner(`merge ${source} → ${target}`);
       const message = await resolveMessage(messageFlag, `merge: integrate ${source} into ${target}`);
       await runSteps(async () => {
@@ -1238,8 +1248,7 @@ async function main() {
     }
 
     case "switch": {
-      const target = arg1;
-      if (!target) die('branch name required — e.g. gg ck main  (or gitgen checkout main)');
+      const target = resolveBranchName(arg1 || "", "branch name");
       banner(`checkout ${target}`);
       await runSteps(async () => {
         await git(["checkout", target]);
