@@ -1198,10 +1198,7 @@ async function main() {
     }
 
     case "branch": {
-      const name = resolveBranchName(
-        arg1 || "",
-        'branch name required — e.g. gg b feature/login  (or gitgen branch feature/login)'
-      );
+      const name = resolveBranchName(arg1 || "", "branch name");
       banner(`create branch ${name}`);
       const dirty = await hasChanges();
       await runSteps(async () => {
@@ -1219,11 +1216,8 @@ async function main() {
     }
 
     case "merge": {
-      const source = resolveBranchName(
-        arg1 || "",
-        'branch name required — e.g. gg m feature/login [target]'
-      );
-      const target = arg2 ? sanitizeBranchName(arg2) || "main" : "main";
+      const source = resolveBranchName(arg1 || "", "source branch");
+      const target = arg2 ? resolveBranchName(arg2, "target branch") : "main";
       banner(`merge ${source} → ${target}`);
       const message = await resolveMessage(messageFlag, `merge: integrate ${source} into ${target}`);
       await runSteps(async () => {
@@ -1254,10 +1248,7 @@ async function main() {
     }
 
     case "switch": {
-      const target = resolveBranchName(
-        arg1 || "",
-        'branch name required — e.g. gg ck main  (or gitgen checkout main)'
-      );
+      const target = resolveBranchName(arg1 || "", "branch name");
       banner(`checkout ${target}`);
       await runSteps(async () => {
         await git(["checkout", target]);

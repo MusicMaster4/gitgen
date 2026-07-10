@@ -27,9 +27,11 @@ describe("sanitizeBranchName", () => {
     assert.equal(sanitizeBranchName("release/1.0.0"), "release/1.0.0");
   });
 
-  it("collapses repeated hyphens and slashes", () => {
+  it("collapses repeated hyphens, slashes, and dots", () => {
     assert.equal(sanitizeBranchName("feature--login"), "feature-login");
     assert.equal(sanitizeBranchName("feature//login"), "feature/login");
+    assert.equal(sanitizeBranchName("feature..main"), "feature.main");
+    assert.equal(sanitizeBranchName("a...b"), "a.b");
   });
 
   it("trims leading and trailing separators", () => {

@@ -10,6 +10,7 @@ export function sanitizeBranchName(input: string): string {
     .replace(/[^a-zA-Z0-9\-/.]+/g, "")
     .replace(/-+/g, "-")
     .replace(/\/+/g, "/")
+    .replace(/\.\.+/g, ".")
     .replace(/^-+|-+$/g, "")
     .replace(/^\/+|\/+$/g, "");
 }
