@@ -354,16 +354,19 @@ async function resolvePrContent(base: string, head: string): Promise<PrContent> 
   const { apiKey, model, language } = await ensureApiReady();
   if (apiKey) {
     try {
-      const content = await withProgress(`AI PR title + body · ${PROVIDER_LABEL[PROVIDER]}`, () =>
-        generatePrContent({
-          path: cwd,
-          base,
-          head,
-          provider: PROVIDER,
-          apiKey,
-          model: model || DEFAULT_MODELS.openrouter,
-          language,
-        })
+      // Two model calls (title, body) in parallel — plain text, no JSON.
+      const content = await withProgress(
+        `AI PR title + body · ${PROVIDER_LABEL[PROVIDER]}`,
+        () =>
+          generatePrContent({
+            path: cwd,
+            base,
+            head,
+            provider: PROVIDER,
+            apiKey,
+            model: model || DEFAULT_MODELS.openrouter,
+            language,
+          })
       );
       return content;
     } catch (e) {

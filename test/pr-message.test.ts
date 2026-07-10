@@ -1,14 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  cleanTitle,
-  extractJsonObject,
-  parsePrContent,
-} from "../lib/pr-message";
+import { cleanBody, cleanTitle } from "../lib/pr-message";
 
 describe("cleanTitle", () => {
   it("strips quotes and trailing periods", () => {
     assert.equal(cleanTitle('"feat: add PR flow".'), "feat: add PR flow");
+  });
+
+  it("takes the first line only", () => {
+    assert.equal(cleanTitle("feat: one\nfeat: two"), "feat: one");
+  });
+
+  it("strips Title: prefixes", () => {
+    assert.equal(cleanTitle("Title: chore: docs"), "chore: docs");
   });
 
   it("collapses whitespace and caps length", () => {
@@ -17,43 +21,22 @@ describe("cleanTitle", () => {
   });
 });
 
-describe("extractJsonObject", () => {
-  it("unwraps markdown fences", () => {
-    const raw = '```json\n{"title":"a","body":"b"}\n```';
-    assert.equal(extractJsonObject(raw), '{"title":"a","body":"b"}');
+describe("cleanBody", () => {
+  it("keeps markdown summary intact", () => {
+    const md = "## Summary\n\n- one\n- two\n";
+    assert.equal(cleanBody(md), md.trim());
   });
 
-  it("finds object inside prose", () => {
-    const raw = 'Here you go:\n{"title":"feat: x","body":"## Summary\\n- y"}\nThanks';
-    assert.ok(extractJsonObject(raw).startsWith("{"));
-    assert.ok(extractJsonObject(raw).endsWith("}"));
-  });
-});
-
-describe("parsePrContent", () => {
-  it("parses clean JSON", () => {
-    const r = parsePrContent('{"title":"feat: ship pr","body":"## Summary\\n- one"}');
-    assert.equal(r.title, "feat: ship pr");
-    assert.match(r.body, /Summary/);
+  it("unwraps a full-reply markdown fence", () => {
+    const raw = "```markdown\n## Summary\n\n- a\n```";
+    assert.equal(cleanBody(raw), "## Summary\n\n- a");
   });
 
-  it("parses fenced JSON", () => {
-    const r = parsePrContent('```json\n{"title":"fix: bug","body":"details"}\n```');
-    assert.equal(r.title, "fix: bug");
-    assert.equal(r.body, "details");
+  it("strips Body: prefix", () => {
+    assert.match(cleanBody("Body:\n## Summary\n- x"), /## Summary/);
   });
 
-  it("falls back to TITLE:/BODY: layout", () => {
-    const r = parsePrContent("TITLE: chore: tidy\nBODY:\n## Summary\n- a\n");
-    assert.equal(r.title, "chore: tidy");
-    assert.match(r.body, /Summary/);
-  });
-
-  it("throws on garbage", () => {
-    assert.throws(() => parsePrContent("not json at all"), /valid JSON|PR/);
-  });
-
-  it("throws when title missing", () => {
-    assert.throws(() => parsePrContent('{"body":"only body"}'), /title/i);
+  it("strips think tags", () => {
+    assert.equal(cleanBody("<think>secret</think>\n## Summary\n- y"), "## Summary\n- y");
   });
 });

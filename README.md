@@ -310,7 +310,7 @@ Flow:
 1. Commit dirty work (if any) with the same AI commit rules as `cnp`
 2. `git push` (or `push -u origin <branch>` when there is no upstream)
 3. Ask for the **base branch** (merge target) — default is `origin/HEAD`, else `main` / `master`
-4. Send commit log + diff vs base to OpenRouter → PR **title** + markdown **body**
+4. Two OpenRouter calls on the same commit log + diff: one for the **title** (one line), one for the markdown **body** (no JSON)
 5. Preview title/body → confirm (skip with `-y`)
 6. `gh pr create --base … --head … --title … --body …` and print the PR URL
 

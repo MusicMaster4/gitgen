@@ -1,5 +1,6 @@
 /**
  * AI pull-request title + body generation — shared by the CLI `pr` flow.
+ * Two separate model calls (title, then body) so we never depend on JSON.
  * Framework-agnostic (node builtins + fetch only), mirrors commit-message.ts.
  */
 import { execFile } from "node:child_process";
@@ -15,7 +16,9 @@ const pexec = promisify(execFile);
 
 const MAX_DIFF_CHARS = 8000;
 const MAX_LOG_CHARS = 4000;
-const MAX_COMPLETION_TOKENS = 512;
+const MAX_TITLE_TOKENS = 64;
+const MAX_BODY_TOKENS = 512;
+const MAX_TITLE_CHARS = 72;
 
 export class PrMessageError extends Error {}
 
@@ -36,42 +39,68 @@ export interface GeneratePrContentOptions {
   language: "en" | "pt";
 }
 
-const PROMPTS: Record<string, string> = {
-  en: `You write GitHub pull request titles and descriptions from a branch diff.
+type PrPart = "title" | "body";
 
-Reply with ONLY valid JSON (no markdown fences, no extra text):
-{"title":"...","body":"..."}
+const TITLE_PROMPTS: Record<string, string> = {
+  en: `GitHub pull request title generator. Reply with ONE line only.
 
-Rules for title:
-- Short, imperative, Conventional Commits style preferred: "feat: …" / "fix: …"
-- Max ~72 characters, no trailing period
-- English
+Rules:
+- Conventional Commits style preferred: "feat: …" / "fix: …" / "chore: …"
+- English, imperative, concise
+- Aim for ~${MAX_TITLE_CHARS} characters. Prefer a complete title over cutting mid-word.
+- ONLY the title. No quotes, no period, no markdown, no extra text.
 
-Rules for body (markdown):
+Examples:
+feat: add automatic PR generation
+fix: correct branch field validation
+chore: update release documentation`,
+  pt: `Gerador de titulo de pull request no GitHub. Responda com UMA linha apenas.
+
+Regras:
+- Estilo Conventional Commits quando fizer sentido: "feat: …" / "fix: …" / "chore: …"
+- Portugues, imperativo, conciso
+- Almeje ~${MAX_TITLE_CHARS} caracteres. Prefira um titulo completo a cortar no meio da palavra.
+- APENAS o titulo. Sem aspas, sem ponto final, sem markdown, sem texto extra.
+
+Exemplos:
+feat: adiciona geracao automatica de PR
+fix: corrige validacao do campo de branch
+chore: atualiza documentacao de release`,
+};
+
+const BODY_PROMPTS: Record<string, string> = {
+  en: `GitHub pull request description writer. Reply with markdown only.
+
+Rules:
 - Start with a ## Summary section (2–5 bullets of what changed and why)
-- Optionally ## Test plan with a short checklist
+- Optionally add ## Test plan with a short checklist
 - Be concrete; use the commits and files provided
 - English
+- No title line, no JSON, no code fences around the whole reply
 - No placeholder fluff like "This PR does X"`,
-  pt: `Voce escreve titulos e descricoes de pull request no GitHub a partir do diff do branch.
+  pt: `Escritor de descricao de pull request no GitHub. Responda apenas em markdown.
 
-Responda APENAS com JSON valido (sem fences markdown, sem texto extra):
-{"title":"...","body":"..."}
-
-Regras do titulo:
-- Curto, imperativo, estilo Conventional Commits quando fizer sentido: "feat: …" / "fix: …"
-- Max ~72 caracteres, sem ponto final
-- Portugues
-
-Regras do body (markdown):
+Regras:
 - Comece com ## Resumo (2–5 bullets do que mudou e por que)
-- Opcionalmente ## Plano de teste com checklist curto
+- Opcionalmente adicione ## Plano de teste com checklist curto
 - Seja concreto; use os commits e arquivos fornecidos
 - Portugues
+- Sem linha de titulo, sem JSON, sem fences de codigo em volta da resposta inteira
 - Sem enrolacao generica`,
 };
 
-function openRouterRequest(apiKey: string, model: string, language: string, context: string) {
+function systemPrompt(part: PrPart, language: string): string {
+  const map = part === "title" ? TITLE_PROMPTS : BODY_PROMPTS;
+  return map[language] || map.en;
+}
+
+function openRouterRequest(
+  apiKey: string,
+  model: string,
+  system: string,
+  context: string,
+  maxTokens: number
+) {
   return fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -82,16 +111,22 @@ function openRouterRequest(apiKey: string, model: string, language: string, cont
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      max_tokens: MAX_COMPLETION_TOKENS,
+      max_tokens: maxTokens,
       messages: [
-        { role: "system", content: PROMPTS[language] || PROMPTS.en },
+        { role: "system", content: system },
         { role: "user", content: context },
       ],
     }),
   });
 }
 
-function openAiRequest(apiKey: string, model: string, language: string, context: string) {
+function openAiRequest(
+  apiKey: string,
+  model: string,
+  system: string,
+  context: string,
+  maxTokens: number
+) {
   return fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -100,9 +135,9 @@ function openAiRequest(apiKey: string, model: string, language: string, context:
     },
     body: JSON.stringify({
       model,
-      instructions: PROMPTS[language] || PROMPTS.en,
+      instructions: system,
       input: context,
-      max_output_tokens: MAX_COMPLETION_TOKENS,
+      max_output_tokens: maxTokens,
       temperature: 0.2,
     }),
   });
@@ -141,56 +176,44 @@ async function readProviderError(res: Response, provider: Provider): Promise<str
   return detail;
 }
 
-/** Strip ```json fences and extract the first JSON object from model output. */
-export function extractJsonObject(raw: string): string {
+/** Sanitize a one-line PR title from free-form model output. */
+export function cleanTitle(raw: string): string {
   let text = (raw || "").trim();
   text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  text = text.replace(/<\/?think>/gi, "").trim();
 
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    return text.slice(start, end + 1);
-  }
-  return text;
-}
+  // Prefer the first non-empty line
+  const line =
+    text
+      .split("\n")
+      .map((l) => l.trim())
+      .find(Boolean) || "";
 
-/** Parse and sanitize model JSON into title + body. */
-export function parsePrContent(raw: string): PrContent {
-  const jsonText = extractJsonObject(raw);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(jsonText);
-  } catch {
-    // Fallback: TITLE:/BODY: plain text layout
-    const titleMatch = raw.match(/^\s*TITLE:\s*(.+)$/im);
-    const bodyMatch = raw.match(/BODY:\s*([\s\S]+)/i);
-    if (titleMatch) {
-      return {
-        title: cleanTitle(titleMatch[1]),
-        body: (bodyMatch?.[1] || "").trim() || cleanTitle(titleMatch[1]),
-      };
-    }
-    throw new PrMessageError("Model did not return valid JSON for the PR");
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new PrMessageError("Model returned unexpected PR JSON shape");
-  }
-  const obj = parsed as Record<string, unknown>;
-  const title = typeof obj.title === "string" ? cleanTitle(obj.title) : "";
-  const body = typeof obj.body === "string" ? obj.body.trim() : "";
-  if (!title) throw new PrMessageError("Model did not return a PR title");
-  return { title, body: body || title };
-}
-
-export function cleanTitle(raw: string): string {
-  return (raw || "")
-    .replace(/^[\s"'`]+/, "")
+  return line
+    .replace(/^\s*(pr title|title|titulo)\s*[:\-]\s*/i, "")
+    .replace(/^[\s"'`*#\-]+/, "")
     .replace(/[\s"'`.]+$/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+/** Sanitize markdown PR body from free-form model output. */
+export function cleanBody(raw: string): string {
+  let text = (raw || "").trim();
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  text = text.replace(/<\/?think>/gi, "").trim();
+
+  // Drop a single outer markdown fence if the model wrapped the whole reply
+  if (/^```(?:markdown|md)?\s*\n/i.test(text) && text.endsWith("```")) {
+    text = text
+      .replace(/^```(?:markdown|md)?\s*\n/i, "")
+      .replace(/\n```\s*$/i, "")
+      .trim();
+  }
+
+  text = text.replace(/^\s*(pr body|body|descricao|description)\s*[:\-]\s*/i, "").trim();
+  return text;
 }
 
 /**
@@ -252,9 +275,37 @@ function buildPrContext(
   return parts.join("\n\n");
 }
 
+async function completePart(
+  opts: {
+    provider: Provider;
+    apiKey: string;
+    model: string;
+    language: string;
+    context: string;
+    part: PrPart;
+  }
+): Promise<string> {
+  const { provider, apiKey, model, language, context, part } = opts;
+  const system = systemPrompt(part, language);
+  const maxTokens = part === "title" ? MAX_TITLE_TOKENS : MAX_BODY_TOKENS;
+
+  const res =
+    provider === "openai"
+      ? await openAiRequest(apiKey, model, system, context, maxTokens)
+      : await openRouterRequest(apiKey, model, system, context, maxTokens);
+
+  if (!res.ok) {
+    throw new PrMessageError(await readProviderError(res, provider));
+  }
+
+  const data = await res.json();
+  return extractResponseText(data);
+}
+
 /**
  * Generate a PR title + markdown body from commits/diff of head vs base.
- * Throws PrMessageError (or CommitMessageError-like) on failure.
+ * Uses two independent model calls (title, body) — no JSON required.
+ * Throws PrMessageError on failure.
  */
 export async function generatePrContent(opts: GeneratePrContentOptions): Promise<PrContent> {
   const { path, base, head, provider, apiKey, model, language } = opts;
@@ -280,18 +331,25 @@ export async function generatePrContent(opts: GeneratePrContentOptions): Promise
   }
 
   const context = buildPrContext(head, base, baseRef, log, stat, diff);
+  const common = { provider, apiKey, model, language, context };
 
-  const res =
-    provider === "openai"
-      ? await openAiRequest(apiKey, model, language, context)
-      : await openRouterRequest(apiKey, model, language, context);
+  // Parallel: title and body don't depend on each other
+  const [rawTitle, rawBody] = await Promise.all([
+    completePart({ ...common, part: "title" }),
+    completePart({ ...common, part: "body" }),
+  ]);
 
-  if (!res.ok) {
-    throw new PrMessageError(await readProviderError(res, provider));
+  const title = cleanTitle(rawTitle);
+  const body = cleanBody(rawBody);
+
+  if (!title) {
+    throw new PrMessageError("Model did not return a PR title");
+  }
+  if (!body) {
+    throw new PrMessageError("Model did not return a PR body");
   }
 
-  const data = await res.json();
-  return parsePrContent(extractResponseText(data));
+  return { title, body };
 }
 
 /** Fallback when AI is unavailable: title from latest commit, body from log. */
@@ -303,9 +361,7 @@ export async function fallbackPrContent(
   const baseRef = await resolveBaseRef(path, base);
   const range = `${baseRef}...HEAD`;
   const log = (await git(path, ["log", range, "--oneline", "--no-decorate"])).trim();
-  const subject = (
-    await git(path, ["log", "-1", "--pretty=%s"])
-  ).trim();
+  const subject = (await git(path, ["log", "-1", "--pretty=%s"])).trim();
   const title = cleanTitle(subject) || `Merge ${head} into ${base}`;
   const bullets = log
     .split("\n")

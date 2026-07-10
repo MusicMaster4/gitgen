@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **PR workflow:** `gg pr [base]` and `gg cnp pr [base]` — push the current branch, generate an AI title + description from the branch diff, and create a GitHub pull request via `gh`. Prompts for the merge target (base) branch; `-y` skips confirm and uses the default base.
+- **PR AI:** title and body are two separate plain-text model calls (no JSON), which is more reliable on smaller models.
 
 ## 1.0.6 — 2026-07-09
 
