@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.10 — 2026-07-10
+
+- Automated release from main.
+
 ## 1.0.9 — 2026-07-10
 
 - Automated release from main.
