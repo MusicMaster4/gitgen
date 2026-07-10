@@ -1,14 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sanitizeBranchName } from "../lib/branch-name";
 
 /* ── helpers ── */
 const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.0-flash-001";
 const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
-
-function normalizeBranch(v: string): string {
-  return (v || "").replace(/[_\s]+/g, "-").replace(/-+/g, "-");
-}
 
 async function copyToClipboard(text: string): Promise<void> {
   try {
@@ -327,7 +324,7 @@ export default function HomeClient({ env }: { env: EnvDefaults }) {
 
   /* shared branch name (sincroniza criar / merge / mudar de branch) */
   const [branch, setBranch] = useState("");
-  const onBranchChange = (v: string) => setBranch(normalizeBranch(v));
+  const onBranchChange = (v: string) => setBranch(sanitizeBranchName(v));
 
   /* commit messages */
   const [pushMsg, setPushMsg] = useState("");

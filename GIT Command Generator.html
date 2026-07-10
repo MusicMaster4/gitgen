@@ -811,7 +811,15 @@
     const $ = id => document.getElementById(id);
 
     function normalizeBranch(v) {
-      return (v || "").replace(/[_\s]+/g, "-").replace(/-+/g, "-");
+      return (v || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[_\s]+/g, "-")
+        .replace(/[^a-zA-Z0-9\-/.]+/g, "")
+        .replace(/-+/g, "-")
+        .replace(/\/+/g, "/")
+        .replace(/^-+|-+$/g, "")
+        .replace(/^\/+|\/+$/g, "");
     }
 
     async function copyText(text, badgeId) {
