@@ -1187,11 +1187,16 @@ async function main() {
       const name = arg1;
       if (!name) die('branch name required — e.g. gg b feature/login  (or gitgen branch feature/login)');
       banner(`create branch ${name}`);
-      const message = await resolveMessage(messageFlag, "feat: new branch");
+      const dirty = await hasChanges();
       await runSteps(async () => {
         await git(["checkout", "-b", name]);
-        await git(["add", "."]);
-        await git(["commit", "-m", message]);
+        if (dirty) {
+          const message = await resolveMessage(messageFlag, "feat: new branch");
+          await git(["add", "."]);
+          await git(["commit", "-m", message]);
+        } else {
+          log(`  ${c.dim("nothing to commit — pushing branch only")}`);
+        }
         await git(["push", "-u", "origin", name], { progress: true });
       });
       return;
