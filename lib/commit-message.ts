@@ -23,7 +23,9 @@ export const DEFAULT_MODELS: Record<Provider, string> = {
 
 /** Caps keep latency low — short Conventional Commits don't need a big window. */
 const MAX_DIFF_CHARS = 6000;
-const MAX_COMPLETION_TOKENS = 64;
+const MAX_COMPLETION_TOKENS = 96;
+/** Soft target for the model prompt — we never hard-truncate the model output. */
+const MAX_MESSAGE_CHARS = 100;
 
 const PROMPTS: Record<string, string> = {
   en: `Git commit message generator. Reply with ONE line only.
@@ -31,7 +33,7 @@ const PROMPTS: Record<string, string> = {
 Rules:
 - Conventional Commits: "<type>: <description>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
 - English, imperative, lowercase description
-- MAX 60 characters total. Short and specific.
+- Aim for ~${MAX_MESSAGE_CHARS} characters. Prefer a complete message over cutting mid-word.
 - ONLY the message. No quotes, no period, no extra text.
 
 Examples:
@@ -43,7 +45,7 @@ chore: bump project dependencies`,
 Regras:
 - Conventional Commits: "<tipo>: <descricao>" (feat|fix|refactor|style|docs|chore|test|perf|build|ci)
 - Portugues, imperativo, minusculas na descricao
-- MAX 60 caracteres no total. Curta e especifica.
+- Almeje ~${MAX_MESSAGE_CHARS} caracteres. Prefira uma mensagem completa a cortar no meio da palavra.
 - APENAS a mensagem. Sem aspas, sem ponto final, sem texto extra.
 
 Exemplos:
@@ -92,10 +94,10 @@ export function cleanMessage(raw: string): string {
 
   for (let i = lines.length - 1; i >= 0; i--) {
     const candidate = stripEdges(lines[i]);
-    if (CC_RE.test(candidate)) return candidate.slice(0, 60);
+    if (CC_RE.test(candidate)) return candidate;
   }
 
-  return stripEdges(lines[lines.length - 1]).slice(0, 60);
+  return stripEdges(lines[lines.length - 1]);
 }
 
 function extractResponseText(data: unknown): string {
