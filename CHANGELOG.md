@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.8 — 2026-07-10
+
+- Automated release from main.
+
 ## Unreleased
 
 - **PR workflow:** `gg pr [base]` and `gg cnp pr [base]` — push the current branch, generate an AI title + description from the branch diff, and create a GitHub pull request via `gh`. Prompts for the merge target (base) branch; `-y` skips confirm and uses the default base.
