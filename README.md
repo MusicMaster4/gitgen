@@ -42,6 +42,8 @@ No browser required. No accounts beyond an optional OpenRouter key. Works in any
 | You type | What runs |
 |----------|-----------|
 | `gg cnp` | `git add .` → AI commit → `git push` |
+| `gg cnp pr` | commit → push → AI PR title/body → `gh pr create` |
+| `gg pr [base]` | push branch → AI PR → open PR into `base` (default: main) |
 | `gg b feature/login` | new branch → add → commit → `push -u` |
 | `gg m feature/login` | commit work → merge into `main` → push |
 | `gg s` | commit work → checkout `main` |
@@ -52,7 +54,8 @@ Messages follow [Conventional Commits](https://www.conventionalcommits.org) (`fe
 
 ## Install
 
-**Requirements:** [Node.js 18+](https://nodejs.org) and [Git](https://git-scm.com) on your `PATH`.
+**Requirements:** [Node.js 18+](https://nodejs.org) and [Git](https://git-scm.com) on your `PATH`.  
+For pull requests: [GitHub CLI](https://cli.github.com) (`gh`) authenticated with `gh auth login`.
 
 ```bash
 npm install -g git-command-generator
@@ -121,6 +124,11 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 | `gg c` | `gg commit` | Stage all → commit (no push) |
 | `gg c p` | `gg commit push` | Stage all → commit → push |
 | `gg cnp` | `gg commit-and-push` | Same as commit + push (one token) |
+| `gg cnp pr` | `gg commit-and-push pr` | Commit → push → AI PR title/body → create PR (asks base) |
+| `gg cnp pr develop` | same | Same, base branch = `develop` (no prompt for base) |
+| `gg pr` | `gg pr` | Commit if dirty → push → AI PR → `gh pr create` (asks base) |
+| `gg pr main` | `gg pr main` | Same, merge target = `main` |
+| `gg pr -y` | `gg pr -y` | PR into default base, skip confirm |
 | `gg b <name>` | `gg branch <name>` | Create branch → add → commit → `push -u origin <name>` |
 | `gg m <src> [dst]` | `gg merge <src> [dst]` | Commit → checkout `dst` (default `main`) → merge `src` → push |
 | `gg s` | `gg save` | Commit current work → checkout `main` |
@@ -151,7 +159,7 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 | Flag | Commands | Effect |
 |------|----------|--------|
 | `-m "msg"` / `--message "msg"` | Any command that commits | Use this message instead of AI / default |
-| `-y` / `--yes` | `restore` / `rs` | Skip the destructive confirmation |
+| `-y` / `--yes` | `restore` / `rs` / `pr` | Skip confirmation (restore discard, or PR create) |
 | `-v` / `-V` / `--version` | — | Same as `version` |
 | `-h` / `--help` | — | Same as `help` |
 
@@ -226,11 +234,20 @@ gg c
 # Explicit message (no AI)
 gg c p -m "chore: bump dependencies"
 
-# Feature branch end-to-end
+# Feature branch end-to-end (merge locally)
 gg b feature/checkout
 # …work…
 gg cnp
 gg m feature/checkout          # merge into main and push
+
+# Feature branch → open a GitHub PR instead of merging locally
+gg b feature/checkout
+# …work…
+gg cnp pr                      # commit + push + PR (asks which base branch)
+# or, after work is already committed:
+gg pr                          # asks base (default: main / origin HEAD)
+gg pr develop                  # PR into develop
+gg pr -y                       # default base, no confirm
 
 # Merge into a non-main branch
 gg m feature/checkout develop
@@ -277,6 +294,34 @@ When you omit `-m` and a key is configured:
 | Clean working tree | Nothing to commit — exits cleanly |
 
 First AI use without a key launches the setup wizard automatically.
+
+---
+
+## How AI pull requests work
+
+`gg pr` / `gg cnp pr` need the [GitHub CLI](https://cli.github.com) on your PATH and a logged-in account:
+
+```bash
+gh auth login
+```
+
+Flow:
+
+1. Commit dirty work (if any) with the same AI commit rules as `cnp`
+2. `git push` (or `push -u origin <branch>` when there is no upstream)
+3. Ask for the **base branch** (merge target) — default is `origin/HEAD`, else `main` / `master`
+4. Send commit log + diff vs base to OpenRouter → PR **title** + markdown **body**
+5. Preview title/body → confirm (skip with `-y`)
+6. `gh pr create --base … --head … --title … --body …` and print the PR URL
+
+Without an API key, title/body fall back to the latest commit subject and the commit list.
+
+| Command | Notes |
+|---------|--------|
+| `gg cnp pr` | Full path: stage → commit → push → PR |
+| `gg pr` | PR from current branch (commits first if dirty) |
+| `gg pr develop` | Base = `develop` (no base prompt) |
+| `gg pr -y` | Default base + create without confirm |
 
 ---
 

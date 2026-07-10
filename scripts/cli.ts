@@ -9,8 +9,9 @@
  * Long form              Short        What it does
  * ─────────────────────  ───────────  ──────────────────────────────────────────
  *   start                start        open the web app with current folder
- *   commit [push]        c [p]        add . -> (AI) commit [-> push]
- *   commit-and-push      cnp          add . -> (AI) commit -> push (one word)
+ *   commit [push] [pr]   c [p] [pr]   add . -> (AI) commit [-> push] [-> PR]
+ *   commit-and-push      cnp [pr]     add . -> (AI) commit -> push [-> PR]
+ *   pr [base]            pr [base]    push branch -> AI title/body -> gh pr create
  *   branch <name>        b <name>     checkout -b -> add -> commit -> push -u
  *   merge  <src> [dst]   m <src> [d]  add -> commit -> checkout dst -> merge -> push
  *   save                 s            add -> commit -> checkout main
@@ -27,8 +28,9 @@
  * Security: the API key is entered hidden (never echoed) and written to a
  * user-only config file (0600). It stays local — only sent to OpenRouter.
  *
- * Flags: -m / --message "msg" · -y / --yes (skip restore confirm)
+ * Flags: -m / --message "msg" · -y / --yes (skip restore / PR confirm)
  * Also: --version / -v / -V (same as version)
+ * PR needs GitHub CLI (`gh`) authenticated (`gh auth login`).
  */
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -55,6 +57,15 @@ import {
   resolveRuntimeSettings,
   saveConfig,
 } from "../lib/config";
+import {
+  detectDefaultBase,
+  fallbackPrContent,
+  generatePrContent,
+  isGhAvailable,
+  PrMessageError,
+  runCapture,
+  type PrContent,
+} from "../lib/pr-message";
 import {
   evaluateUpdate,
   npmGlobalInstallCommand,
@@ -295,6 +306,170 @@ async function hasChanges(): Promise<boolean> {
   return (await gitQuiet(["status", "--porcelain", "-u"])).trim() !== "";
 }
 
+async function currentBranch(): Promise<string> {
+  const name = (await gitQuiet(["branch", "--show-current"])).trim();
+  if (!name) die("detached HEAD — checkout a branch before creating a PR");
+  return name;
+}
+
+/** True when the current branch has an upstream configured. */
+async function hasUpstream(): Promise<boolean> {
+  const up = (await gitQuiet(["rev-parse", "--abbrev-ref", "@{upstream}"])).trim();
+  return Boolean(up);
+}
+
+function isPrToken(t: string | undefined): boolean {
+  const v = (t || "").toLowerCase();
+  return v === "pr" || v === "pull" || v === "pull-request";
+}
+
+/**
+ * After a commit/push command, detect trailing `pr [base]`.
+ * Examples: cnp pr · cnp pr develop · commit push pr · commit pr main
+ */
+function parseCommitPrArgs(
+  raw: string,
+  a1: string | undefined,
+  a2: string | undefined,
+  a3: string | undefined
+): { push: boolean; wantPr: boolean; prBase?: string } {
+  const pushByAlias = PUSH_ALIASES.has(raw);
+  // cnp [pr [base]]
+  if (pushByAlias) {
+    if (isPrToken(a1)) return { push: true, wantPr: true, prBase: a2 };
+    return { push: true, wantPr: false };
+  }
+  // commit push pr [base]  |  commit p pr [base]
+  if (isPushToken(a1)) {
+    if (isPrToken(a2)) return { push: true, wantPr: true, prBase: a3 };
+    return { push: true, wantPr: false };
+  }
+  // commit pr [base]  (implies push — you can't open a remote PR without push)
+  if (isPrToken(a1)) return { push: true, wantPr: true, prBase: a2 };
+  return { push: false, wantPr: false };
+}
+
+/** AI PR title/body, with sensible fallback if no key / API error. */
+async function resolvePrContent(base: string, head: string): Promise<PrContent> {
+  const { apiKey, model, language } = await ensureApiReady();
+  if (apiKey) {
+    try {
+      const content = await withProgress(`AI PR title + body · ${PROVIDER_LABEL[PROVIDER]}`, () =>
+        generatePrContent({
+          path: cwd,
+          base,
+          head,
+          provider: PROVIDER,
+          apiKey,
+          model: model || DEFAULT_MODELS.openrouter,
+          language,
+        })
+      );
+      return content;
+    } catch (e) {
+      const reason =
+        e instanceof PrMessageError || e instanceof CommitMessageError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      log(`  ${sym.warn} ${c.yellow("ai skipped")} ${c.dim(`(${reason}) — using commit log`)}`);
+    }
+  } else {
+    log(`  ${c.dim("PR text from git log")} ${c.dim("(no API key)")}`);
+  }
+  return fallbackPrContent(cwd, base, head);
+}
+
+/**
+ * Push current branch (set upstream if needed), generate AI PR text, create via `gh`.
+ * `baseHint` is optional; interactive prompt defaults to origin's default branch.
+ * @returns true if a PR was created, false if the user aborted the confirm step.
+ */
+async function createPullRequest(baseHint?: string): Promise<boolean> {
+  if (!(await isGhAvailable())) {
+    die(
+      "GitHub CLI (gh) not found — install https://cli.github.com and run: gh auth login"
+    );
+  }
+
+  const head = await currentBranch();
+  const defaultBase = await detectDefaultBase(cwd);
+  let base = (baseHint || "").trim();
+  if (!base) {
+    if (yes) {
+      base = defaultBase;
+    } else {
+      base = await promptLine("Base branch (merge target)", defaultBase);
+    }
+  }
+  if (!base) die("base branch required");
+  if (base === head) {
+    die(`base and head are both "${head}" — checkout a feature branch first`);
+  }
+
+  // Ensure remote has our commits
+  if (await hasUpstream()) {
+    await git(["push"], { progress: true });
+  } else {
+    await git(["push", "-u", "origin", head], { progress: true });
+  }
+
+  const content = await resolvePrContent(base, head);
+  log(row("base", base));
+  log(row("head", head));
+  log(row("title", c.bold(content.title)));
+  // Preview body (compact)
+  const preview = content.body
+    .split("\n")
+    .slice(0, 12)
+    .map((l) => `    ${c.dim(l)}`)
+    .join("\n");
+  if (preview) {
+    log(`  ${c.dim("body")}`);
+    log(preview);
+    if (content.body.split("\n").length > 12) log(`    ${c.dim("…")}`);
+  }
+
+  if (!yes) {
+    const ok = await confirm("Create this pull request?");
+    if (!ok) {
+      log(`  ${c.dim("PR aborted")}`);
+      return false;
+    }
+  }
+
+  const url = (
+    await withProgress("gh pr create", () =>
+      runCapture(
+        "gh",
+        [
+          "pr",
+          "create",
+          "--base",
+          base,
+          "--head",
+          head,
+          "--title",
+          content.title,
+          "--body",
+          content.body,
+        ],
+        cwd
+      )
+    )
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .pop();
+
+  if (url) {
+    log(row("url", c.underline(c.cyan(url))));
+  }
+  return true;
+}
+
 async function promptLine(question: string, defaultValue?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const hint = defaultValue ? ` ${c.dim(`[${defaultValue}]`)}` : "";
@@ -512,6 +687,9 @@ for (let i = 0; i < argv.length; i++) {
 const SHORT_CMDS: Record<string, string> = {
   c: "commit",
   cnp: "commit", // commit AND push in one word (implies push — see PUSH_ALIASES)
+  pr: "pr",
+  pull: "pr",
+  "pull-request": "pr",
   b: "branch",
   m: "merge",
   s: "save",
@@ -806,8 +984,9 @@ function helpText(): string {
   const d = c.dim;
   const rows: Array<[string, string, string]> = [
     ["start", "start", "open the web app with this folder"],
-    ["commit [push] [-m]", "c [p] [-m]", "add . → commit [→ push]  (AI msg if no -m)"],
-    ["commit-and-push", "cnp", "add . → commit → push  (one word)"],
+    ["commit [push] [pr] [-m]", "c [p] [pr] [-m]", "add . → commit [→ push] [→ PR]"],
+    ["commit-and-push [pr]", "cnp [pr]", "add . → commit → push [→ AI PR via gh]"],
+    ["pr [base] [-y]", "pr [base]", "push branch → AI title/body → gh pr create"],
     ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
     ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|main → merge → push"],
     ["save [-m]", "s [-m]", "commit current work, then checkout main"],
@@ -843,10 +1022,13 @@ ${body}
     ${d("$")} gg setup
     ${d("$")} gg start               ${d("# open web UI (not bare gg)")}
     ${d("$")} gg cnp                 ${d("# commit + push")}
+    ${d("$")} gg cnp pr              ${d("# commit + push + open PR (asks base)")}
+    ${d("$")} gg pr develop          ${d("# push + PR into develop")}
+    ${d("$")} gg pr -y               ${d("# PR into default base, no confirm")}
     ${d("$")} gg mo google/gemini-2.0-flash-001
     ${d("$")} gg config reset        ${d("# redo the full onboard")}
 
-  ${d("AI:")} ${PROVIDER_LABEL[PROVIDER]} ${d(`(${model})`)}${apiKey ? c.green("  ✓ key set") : c.yellow("  ! no API key — run gitgen setup")}`;
+  ${d("PR needs")} ${c.cyan("gh")} ${d("authenticated")} ${d("·")} ${d("AI:")} ${PROVIDER_LABEL[PROVIDER]} ${d(`(${model})`)}${apiKey ? c.green("  ✓ key set") : c.yellow("  ! no API key — run gitgen setup")}`;
 }
 
 async function main() {
@@ -887,19 +1069,58 @@ async function main() {
     }
 
     case "commit": {
-      // `cnp` means commit+push by name; `commit p` / `commit push` also works.
-      const push = PUSH_ALIASES.has(rawCmd) || isPushToken(arg1);
-      banner(`commit${push ? " + push" : ""}`);
-      if (!(await hasChanges())) {
+      // `cnp` = commit+push; optional trailing `pr [base]` opens a GitHub PR.
+      // `commit push pr develop` / `cnp pr` / `commit pr` all work.
+      const { push, wantPr, prBase } = parseCommitPrArgs(rawCmd, arg1, arg2, arg3);
+      const label = wantPr ? "commit + push + PR" : push ? "commit + push" : "commit";
+      banner(label);
+
+      if (await hasChanges()) {
+        const message = await resolveMessage(
+          messageFlag,
+          push || wantPr ? "feat: update" : "feat: save progress"
+        );
+        await runSteps(async () => {
+          await git(["add", "."]);
+          await git(["commit", "-m", message]);
+          if (push && !wantPr) await git(["push"], { progress: true });
+        });
+      } else if (!wantPr) {
         log(`  ${sym.ok} ${c.dim("nothing to commit — working tree clean")}`);
         return;
+      } else {
+        log(`  ${c.dim("nothing to commit — opening PR from current branch")}`);
       }
-      const message = await resolveMessage(messageFlag, push ? "feat: update" : "feat: save progress");
-      await runSteps(async () => {
-        await git(["add", "."]);
-        await git(["commit", "-m", message]);
-        if (push) await git(["push"], { progress: true });
-      });
+
+      if (wantPr) {
+        // createPullRequest pushes (with -u if needed) then runs gh pr create
+        try {
+          const created = await createPullRequest(prBase);
+          if (created) log(`  ${sym.ok} ${c.green("done")}`);
+        } catch (e) {
+          const stderr = (e as { stderr?: string })?.stderr;
+          die(stderr?.trim() || (e instanceof Error ? e.message : String(e)));
+        }
+      }
+      return;
+    }
+
+    case "pr": {
+      // gg pr [base]  — commit dirty work, push, AI title/body, gh pr create
+      const baseArg = arg1 && !isPrToken(arg1) ? arg1 : undefined;
+      banner(`pull request${baseArg ? ` → ${baseArg}` : ""}`);
+      try {
+        if (await hasChanges()) {
+          const message = await resolveMessage(messageFlag, "feat: update");
+          await git(["add", "."]);
+          await git(["commit", "-m", message]);
+        }
+        const created = await createPullRequest(baseArg);
+        if (created) log(`  ${sym.ok} ${c.green("done")}`);
+      } catch (e) {
+        const stderr = (e as { stderr?: string })?.stderr;
+        die(stderr?.trim() || (e instanceof Error ? e.message : String(e)));
+      }
       return;
     }
 
