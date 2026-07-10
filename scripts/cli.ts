@@ -15,7 +15,7 @@
  *   branch <name>        b <name>     checkout -b -> add -> commit -> push -u
  *   merge  <src> [dst]   m <src> [d]  add -> commit -> checkout dst -> merge -> push
  *   save                 s            add -> commit -> checkout main
- *   switch <branch>      sw <branch>  checkout <branch>
+ *   checkout <branch>    ck <branch>  git checkout <branch>  (sw alias)
  *   remote <url>         r <url>      init -> remote add origin -> first push
  *   restore [file]       rs [file]    git restore . (or one file) — destructive
  *   model [slug]         mo [slug]    show or switch the AI model
@@ -741,6 +741,8 @@ const SHORT_CMDS: Record<string, string> = {
   b: "branch",
   m: "merge",
   s: "save",
+  ck: "switch",
+  checkout: "switch",
   sw: "switch",
   r: "remote",
   rs: "restore",
@@ -1038,7 +1040,7 @@ function helpText(): string {
     ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
     ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|main → merge → push"],
     ["save [-m]", "s [-m]", "commit current work, then checkout main"],
-    ["switch <branch>", "sw <branch>", "checkout <branch>"],
+    ["checkout <branch>", "ck <branch>", "git checkout <branch>"],
     ["remote <url> [-m]", "r <url> [-m]", "git init → remote add origin → first push"],
     ["restore [file] [-y]", "rs [file] [-y]", "discard changes (all, or one file)"],
     ["model [slug]", "mo [slug]", "show or switch the AI model"],
@@ -1237,8 +1239,8 @@ async function main() {
 
     case "switch": {
       const target = arg1;
-      if (!target) die('branch name required — e.g. gg sw main  (or gitgen switch main)');
-      banner(`switch to ${target}`);
+      if (!target) die('branch name required — e.g. gg ck main  (or gitgen checkout main)');
+      banner(`checkout ${target}`);
       await runSteps(async () => {
         await git(["checkout", target]);
       });
