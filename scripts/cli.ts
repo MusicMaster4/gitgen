@@ -28,7 +28,7 @@
  * Security: the API key is entered hidden (never echoed) and written to a
  * user-only config file (0600). It stays local — only sent to OpenRouter.
  *
- * Flags: -m / --message "msg" · -y / --yes (skip restore / PR confirm)
+ * Flags: -m / --message "msg" · -y / --yes (skip restore confirm; PR uses default base)
  * Also: --version / -v / -V (same as version)
  * PR needs GitHub CLI (`gh`) authenticated (`gh auth login`).
  */
@@ -384,12 +384,55 @@ async function resolvePrContent(base: string, head: string): Promise<PrContent> 
   return fallbackPrContent(cwd, base, head);
 }
 
+type ExistingPr = { url: string; number: number; base: string };
+
+/** Open PR for this head branch, if any (one feature branch → one open PR). */
+async function findOpenPrForHead(head: string): Promise<ExistingPr | null> {
+  try {
+    const out = (
+      await runCapture(
+        "gh",
+        [
+          "pr",
+          "list",
+          "--head",
+          head,
+          "--state",
+          "open",
+          "--json",
+          "url,number,baseRefName",
+          "--limit",
+          "5",
+        ],
+        cwd
+      )
+    ).trim();
+    const list = JSON.parse(out || "[]") as Array<{
+      url?: string;
+      number?: number;
+      baseRefName?: string;
+    }>;
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const first = list[0];
+    if (!first?.url) return null;
+    return {
+      url: first.url,
+      number: typeof first.number === "number" ? first.number : 0,
+      base: first.baseRefName || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Push current branch (set upstream if needed), generate AI PR text, create via `gh`.
- * `baseHint` is optional; interactive prompt defaults to origin's default branch.
- * @returns true if a PR was created, false if the user aborted the confirm step.
+ * Creates immediately — no extra confirm (the command itself is the intent).
+ * If this head already has an open PR, push only and reuse that PR (no second create).
+ * `baseHint` is optional; interactive prompt defaults to origin's default branch
+ * (or uses the default when `-y` is set).
  */
-async function createPullRequest(baseHint?: string): Promise<boolean> {
+async function createPullRequest(baseHint?: string): Promise<void> {
   if (!(await isGhAvailable())) {
     die(
       "GitHub CLI (gh) not found — install https://cli.github.com and run: gh auth login"
@@ -418,11 +461,22 @@ async function createPullRequest(baseHint?: string): Promise<boolean> {
     await git(["push", "-u", "origin", head], { progress: true });
   }
 
+  // Same head already has an open PR → just update via push; don't create another.
+  const existing = await withProgress("check existing PR", () => findOpenPrForHead(head));
+  if (existing) {
+    log(`  ${sym.ok} ${c.green("PR already open")} ${c.dim(`#${existing.number || "?"}`)}`);
+    log(row("base", existing.base || base));
+    log(row("head", head));
+    log(row("url", c.underline(c.cyan(existing.url))));
+    log(`  ${c.dim("skipped create — push updated the existing PR")}`);
+    return;
+  }
+
   const content = await resolvePrContent(base, head);
   log(row("base", base));
   log(row("head", head));
   log(row("title", c.bold(content.title)));
-  // Preview body (compact)
+  // Preview body (compact) while gh creates the PR
   const preview = content.body
     .split("\n")
     .slice(0, 12)
@@ -432,14 +486,6 @@ async function createPullRequest(baseHint?: string): Promise<boolean> {
     log(`  ${c.dim("body")}`);
     log(preview);
     if (content.body.split("\n").length > 12) log(`    ${c.dim("…")}`);
-  }
-
-  if (!yes) {
-    const ok = await confirm("Create this pull request?");
-    if (!ok) {
-      log(`  ${c.dim("PR aborted")}`);
-      return false;
-    }
   }
 
   const url = (
@@ -470,7 +516,6 @@ async function createPullRequest(baseHint?: string): Promise<boolean> {
   if (url) {
     log(row("url", c.underline(c.cyan(url))));
   }
-  return true;
 }
 
 async function promptLine(question: string, defaultValue?: string): Promise<string> {
@@ -989,7 +1034,7 @@ function helpText(): string {
     ["start", "start", "open the web app with this folder"],
     ["commit [push] [pr] [-m]", "c [p] [pr] [-m]", "add . → commit [→ push] [→ PR]"],
     ["commit-and-push [pr]", "cnp [pr]", "add . → commit → push [→ AI PR via gh]"],
-    ["pr [base] [-y]", "pr [base]", "push branch → AI title/body → gh pr create"],
+    ["pr [base] [-y]", "pr [base]", "push → AI title/body → create PR (asks base)"],
     ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
     ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|main → merge → push"],
     ["save [-m]", "s [-m]", "commit current work, then checkout main"],
@@ -1025,9 +1070,9 @@ ${body}
     ${d("$")} gg setup
     ${d("$")} gg start               ${d("# open web UI (not bare gg)")}
     ${d("$")} gg cnp                 ${d("# commit + push")}
-    ${d("$")} gg cnp pr              ${d("# commit + push + open PR (asks base)")}
+    ${d("$")} gg cnp pr              ${d("# commit + push + create PR (asks base)")}
     ${d("$")} gg pr develop          ${d("# push + PR into develop")}
-    ${d("$")} gg pr -y               ${d("# PR into default base, no confirm")}
+    ${d("$")} gg pr -y               ${d("# PR into default base (no base prompt)")}
     ${d("$")} gg mo google/gemini-2.0-flash-001
     ${d("$")} gg config reset        ${d("# redo the full onboard")}
 
@@ -1083,11 +1128,22 @@ async function main() {
           messageFlag,
           push || wantPr ? "feat: update" : "feat: save progress"
         );
-        await runSteps(async () => {
-          await git(["add", "."]);
-          await git(["commit", "-m", message]);
-          if (push && !wantPr) await git(["push"], { progress: true });
-        });
+        // When also opening a PR, skip runSteps' early "done" — single done after PR.
+        if (wantPr) {
+          try {
+            await git(["add", "."]);
+            await git(["commit", "-m", message]);
+          } catch (e) {
+            const stderr = (e as { stderr?: string })?.stderr;
+            die(stderr?.trim() || (e instanceof Error ? e.message : String(e)));
+          }
+        } else {
+          await runSteps(async () => {
+            await git(["add", "."]);
+            await git(["commit", "-m", message]);
+            if (push) await git(["push"], { progress: true });
+          });
+        }
       } else if (!wantPr) {
         log(`  ${sym.ok} ${c.dim("nothing to commit — working tree clean")}`);
         return;
@@ -1098,8 +1154,8 @@ async function main() {
       if (wantPr) {
         // createPullRequest pushes (with -u if needed) then runs gh pr create
         try {
-          const created = await createPullRequest(prBase);
-          if (created) log(`  ${sym.ok} ${c.green("done")}`);
+          await createPullRequest(prBase);
+          log(`  ${sym.ok} ${c.green("done")}`);
         } catch (e) {
           const stderr = (e as { stderr?: string })?.stderr;
           die(stderr?.trim() || (e instanceof Error ? e.message : String(e)));
@@ -1118,8 +1174,8 @@ async function main() {
           await git(["add", "."]);
           await git(["commit", "-m", message]);
         }
-        const created = await createPullRequest(baseArg);
-        if (created) log(`  ${sym.ok} ${c.green("done")}`);
+        await createPullRequest(baseArg);
+        log(`  ${sym.ok} ${c.green("done")}`);
       } catch (e) {
         const stderr = (e as { stderr?: string })?.stderr;
         die(stderr?.trim() || (e instanceof Error ? e.message : String(e)));

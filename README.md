@@ -43,7 +43,7 @@ No browser required. No accounts beyond an optional OpenRouter key. Works in any
 |----------|-----------|
 | `gg cnp` | `git add .` → AI commit → `git push` |
 | `gg cnp pr` | commit → push → AI PR title/body → `gh pr create` |
-| `gg pr [base]` | push branch → AI PR → open PR into `base` (default: main) |
+| `gg pr [base]` | commit if dirty → push → AI PR → open PR into `base` (default: main) |
 | `gg b feature/login` | new branch → add → commit → `push -u` |
 | `gg m feature/login` | commit work → merge into `main` → push |
 | `gg s` | commit work → checkout `main` |
@@ -128,7 +128,7 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 | `gg cnp pr develop` | same | Same, base branch = `develop` (no prompt for base) |
 | `gg pr` | `gg pr` | Commit if dirty → push → AI PR → `gh pr create` (asks base) |
 | `gg pr main` | `gg pr main` | Same, merge target = `main` |
-| `gg pr -y` | `gg pr -y` | PR into default base, skip confirm |
+| `gg pr -y` | `gg pr -y` | PR into default base (no base prompt) |
 | `gg b <name>` | `gg branch <name>` | Create branch → add → commit → `push -u origin <name>` |
 | `gg m <src> [dst]` | `gg merge <src> [dst]` | Commit → checkout `dst` (default `main`) → merge `src` → push |
 | `gg s` | `gg save` | Commit current work → checkout `main` |
@@ -159,7 +159,7 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 | Flag | Commands | Effect |
 |------|----------|--------|
 | `-m "msg"` / `--message "msg"` | Any command that commits | Use this message instead of AI / default |
-| `-y` / `--yes` | `restore` / `rs` / `pr` | Skip confirmation (restore discard, or PR create) |
+| `-y` / `--yes` | `restore` / `rs` / `pr` | Skip restore confirm; on PR, use default base without prompting |
 | `-v` / `-V` / `--version` | — | Same as `version` |
 | `-h` / `--help` | — | Same as `help` |
 
@@ -247,7 +247,7 @@ gg cnp pr                      # commit + push + PR (asks which base branch)
 # or, after work is already committed:
 gg pr                          # asks base (default: main / origin HEAD)
 gg pr develop                  # PR into develop
-gg pr -y                       # default base, no confirm
+gg pr -y                       # default base, no base prompt
 
 # Merge into a non-main branch
 gg m feature/checkout develop
@@ -311,8 +311,8 @@ Flow:
 2. `git push` (or `push -u origin <branch>` when there is no upstream)
 3. Ask for the **base branch** (merge target) — default is `origin/HEAD`, else `main` / `master`
 4. Two OpenRouter calls on the same commit log + diff: one for the **title** (one line), one for the markdown **body** (no JSON)
-5. Preview title/body → confirm (skip with `-y`)
-6. `gh pr create --base … --head … --title … --body …` and print the PR URL
+5. If this head branch **already has an open PR**, skip create — print that URL (push already updated it)
+6. Otherwise: show title/body preview and create immediately via `gh pr create`, then print the URL
 
 Without an API key, title/body fall back to the latest commit subject and the commit list.
 
@@ -321,7 +321,7 @@ Without an API key, title/body fall back to the latest commit subject and the co
 | `gg cnp pr` | Full path: stage → commit → push → PR |
 | `gg pr` | PR from current branch (commits first if dirty) |
 | `gg pr develop` | Base = `develop` (no base prompt) |
-| `gg pr -y` | Default base + create without confirm |
+| `gg pr -y` | Default base, no base prompt (creates immediately either way) |
 
 ---
 
