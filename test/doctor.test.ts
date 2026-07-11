@@ -72,6 +72,32 @@ describe("runDoctorChecks", () => {
     assert.equal(node?.status, "ok");
   });
 
+  it("skips upstream check in detached HEAD", async () => {
+    const summary = await runDoctorChecks({
+      cwd: "/tmp/proj",
+      nodeVersion: "v20.0.0",
+      configPath: "/tmp/cfg.json",
+      loadConfigFn: () => ({}),
+      runCmd: async (cmd, args) => {
+        if (cmd === "git" && args[0] === "--version") {
+          return { stdout: "git version 2.43.0", stderr: "", code: 0 };
+        }
+        if (cmd === "git" && args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
+          return { stdout: "true\n", stderr: "", code: 0 };
+        }
+        if (cmd === "git" && args[0] === "branch") {
+          return { stdout: "", stderr: "", code: 0 };
+        }
+        return { stdout: "", stderr: "", code: 1 };
+      },
+      fetchFn: async () => new Response("{}", { status: 200 }),
+    });
+
+    const branch = summary.checks.find((c) => c.id === "branch");
+    assert.equal(branch?.status, "warn");
+    assert.equal(summary.checks.find((c) => c.id === "upstream"), undefined);
+  });
+
   it("validates OpenRouter key via fetch", async () => {
     const summary = await runDoctorChecks({
       cwd: "/tmp/proj",

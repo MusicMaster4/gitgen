@@ -3,6 +3,7 @@
  * Framework-agnostic — safe to unit-test with injected command runners.
  */
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import {
   type CommitLanguage,
@@ -156,6 +157,9 @@ async function checkUpstream(deps: DoctorDeps, run: DoctorDeps["runCmd"]): Promi
   const repo = await run!("git", ["rev-parse", "--is-inside-work-tree"], deps.cwd);
   if (repo.code !== 0 || repo.stdout.trim() !== "true") return null;
 
+  const branch = await run!("git", ["branch", "--show-current"], deps.cwd);
+  if (!branch.stdout.trim()) return null; // detached HEAD — checkBranch already warns
+
   const up = await run!("git", ["rev-parse", "--abbrev-ref", "@{upstream}"], deps.cwd);
   const name = up.stdout.trim();
   if (name) {
@@ -170,11 +174,7 @@ async function checkUpstream(deps: DoctorDeps, run: DoctorDeps["runCmd"]): Promi
   };
 }
 
-function checkApiKey(
-  configPath: string,
-  file: GitgenConfig,
-  env: EnvLike
-): DoctorCheck {
+function checkApiKey(file: GitgenConfig, env: EnvLike): DoctorCheck {
   const { apiKey, model, language } = resolveRuntimeSettings(file, env);
   if (!apiKey) {
     return {
@@ -204,11 +204,15 @@ function checkApiKey(
 }
 
 function checkConfigPath(configPath: string): DoctorCheck {
+  if (existsSync(configPath)) {
+    return { id: "config", label: "Config", status: "ok", detail: configPath };
+  }
   return {
     id: "config",
     label: "Config",
-    status: "ok",
-    detail: configPath,
+    status: "warn",
+    detail: `${configPath} — not found, using defaults`,
+    tip: "run gg setup",
   };
 }
 
@@ -227,9 +231,12 @@ async function checkGh(run: DoctorDeps["runCmd"], cwd: string): Promise<DoctorCh
   return { id: "gh", label: "GitHub CLI", status: "ok", detail: line };
 }
 
-async function checkGhAuth(run: DoctorDeps["runCmd"], cwd: string): Promise<DoctorCheck | null> {
-  const ver = await run!("gh", ["--version"], cwd);
-  if (ver.code !== 0) return null;
+async function checkGhAuth(
+  run: DoctorDeps["runCmd"],
+  cwd: string,
+  ghAvailable: boolean
+): Promise<DoctorCheck | null> {
+  if (!ghAvailable) return null;
 
   const auth = await run!("gh", ["auth", "status"], cwd);
   if (auth.code === 0) {
@@ -311,11 +318,13 @@ export async function runDoctorChecks(deps: DoctorDeps): Promise<DoctorSummary> 
   const upstream = await checkUpstream(deps, run);
   if (upstream) checks.push(upstream);
 
-  checks.push(checkApiKey(configPath, file, env));
+  checks.push(checkApiKey(file, env));
   checks.push(checkConfigPath(configPath));
-  checks.push(await checkGh(run, deps.cwd));
 
-  const ghAuth = await checkGhAuth(run, deps.cwd);
+  const gh = await checkGh(run, deps.cwd);
+  checks.push(gh);
+
+  const ghAuth = await checkGhAuth(run, deps.cwd, gh.status === "ok");
   if (ghAuth) checks.push(ghAuth);
 
   const or = await checkOpenRouter(apiKey, fetchFn);
