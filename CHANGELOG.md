@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.13 — 2026-07-11
+
+- Automated release from main.
+
 ## 1.0.12 — 2026-07-11
 
 - Automated release from main.
