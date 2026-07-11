@@ -18,6 +18,8 @@
  *   checkout <branch>    ck <branch>  git checkout <branch>  (sw alias)
  *   remote <url>         r <url>      init -> remote add origin -> first push
  *   restore [file]       rs [file]    git restore . (or one file) — destructive
+ *   pull [--merge]       pl [--merge] git pull --rebase (default) or merge pull
+ *   doctor               dr           check git, gh, API key, repo, upstream
  *   model [slug]         mo [slug]    show or switch the AI model
  *   setup / onboard      setup        OpenRouter onboard (hidden key + model + lang)
  *   config […|reset]     config       show/set config · reset = re-onboard
@@ -29,6 +31,7 @@
  * user-only config file (0600). It stays local — only sent to OpenRouter.
  *
  * Flags: -m / --message "msg" · -y / --yes (skip restore confirm; PR uses default base)
+ *        --merge (pull uses merge instead of rebase) · --rebase (pull default, explicit)
  * Also: --version / -v / -V (same as version)
  * PR needs GitHub CLI (`gh`) authenticated (`gh auth login`).
  */
@@ -72,6 +75,7 @@ import {
   parseNpmLatestVersion,
 } from "../lib/update-check";
 import { sanitizeBranchName } from "../lib/branch-name";
+import { runDoctorChecks } from "../lib/doctor";
 import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 import { c, header, row, sym, visibleLength } from "../lib/ui";
 
@@ -328,6 +332,16 @@ async function currentBranch(): Promise<string> {
 async function hasUpstream(): Promise<boolean> {
   const up = (await gitQuiet(["rev-parse", "--abbrev-ref", "@{upstream}"])).trim();
   return Boolean(up);
+}
+
+async function isInsideGitRepo(): Promise<boolean> {
+  return (await gitQuiet(["rev-parse", "--is-inside-work-tree"])).trim() === "true";
+}
+
+async function ensureGitRepo(): Promise<void> {
+  if (!(await isInsideGitRepo())) {
+    die("not inside a git repository — cd into a project or run git init");
+  }
 }
 
 function isPrToken(t: string | undefined): boolean {
@@ -736,11 +750,14 @@ async function runSteps(steps: () => Promise<void>): Promise<void> {
 const argv = process.argv.slice(2);
 let messageFlag: string | undefined;
 let yes = false;
+let pullMerge = false;
 const positional: string[] = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "-m" || a === "--message") messageFlag = argv[++i];
   else if (a === "-y" || a === "--yes") yes = true;
+  else if (a === "--merge") pullMerge = true;
+  else if (a === "--rebase") pullMerge = false;
   else positional.push(a);
 }
 
@@ -758,6 +775,9 @@ const SHORT_CMDS: Record<string, string> = {
   sw: "switch",
   r: "remote",
   rs: "restore",
+  pl: "pull",
+  dr: "doctor",
+  doctor: "doctor",
   mo: "model",
   v: "version",
   h: "help",
@@ -978,6 +998,36 @@ async function fetchLatestFromNpm(packageName: string): Promise<string> {
   return parseNpmLatestVersion(json);
 }
 
+async function cmdDoctor(): Promise<void> {
+  banner("doctor");
+  const summary = await runDoctorChecks({ cwd, env: process.env });
+  for (const check of summary.checks) {
+    const mark =
+      check.status === "ok" ? sym.ok : check.status === "warn" ? sym.warn : sym.fail;
+    const tone =
+      check.status === "ok"
+        ? c.green(check.label)
+        : check.status === "warn"
+          ? c.yellow(check.label)
+          : c.red(check.label);
+    log(`  ${mark} ${tone}  ${c.dim(check.detail)}`);
+    if (check.tip) log(`      ${c.dim(check.tip)}`);
+  }
+  log("");
+  if (summary.fail === 0 && summary.warn === 0) {
+    log(`  ${sym.ok} ${c.green("all checks passed")}`);
+  } else if (summary.fail === 0) {
+    log(
+      `  ${sym.ok} ${c.green("ready")}  ${c.dim(`(${summary.warn} warning${summary.warn === 1 ? "" : "s"})`)}`
+    );
+  } else {
+    log(
+      `  ${sym.fail} ${c.red(`${summary.fail} check${summary.fail === 1 ? "" : "s"} failed`)}  ${c.dim(`· ${summary.ok} ok · ${summary.warn} warn`)}`
+    );
+    process.exitCode = summary.exitCode;
+  }
+}
+
 async function cmdUpdate(): Promise<void> {
   const packageName = getPackageName();
   const current = getVersion();
@@ -1055,6 +1105,8 @@ function helpText(): string {
     ["checkout <branch>", "ck <branch>", "git checkout <branch>"],
     ["remote <url> [-m]", "r <url> [-m]", "git init → remote add origin → first push"],
     ["restore [file] [-y]", "rs [file] [-y]", "discard changes (all, or one file)"],
+    ["pull [--merge]", "pl [--merge]", "pull upstream (rebase default; --merge to merge)"],
+    ["doctor", "dr", "check git, gh, API key, repo, upstream"],
     ["model [slug]", "mo [slug]", "show or switch the AI model"],
     ["setup / onboard", "setup", "OpenRouter onboard (hidden key + model)"],
     ["config [show|set|path|reset]", "config", "show/set config · reset = re-onboard"],
@@ -1124,6 +1176,25 @@ async function main() {
     case "update":
       await cmdUpdate();
       return;
+
+    case "doctor":
+      await cmdDoctor();
+      return;
+
+    case "pull": {
+      await ensureGitRepo();
+      const mode = pullMerge ? "merge" : "rebase";
+      banner(`pull (${mode})`);
+      if (!(await hasUpstream())) {
+        die(
+          "no upstream configured — push first with upstream, e.g. gg cnp or gg b <name> on a new branch"
+        );
+      }
+      await runSteps(async () => {
+        await git(pullMerge ? ["pull"] : ["pull", "--rebase"], { progress: true });
+      });
+      return;
+    }
 
     case "start": {
       await openApp();
