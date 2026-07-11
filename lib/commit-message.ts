@@ -100,7 +100,8 @@ export function cleanMessage(raw: string): string {
   return stripEdges(lines[lines.length - 1]);
 }
 
-function extractResponseText(data: unknown): string {
+export function extractResponseText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
   const response = data as {
     output_text?: unknown;
     output?: Array<{ content?: Array<{ text?: unknown }> }>;
@@ -122,7 +123,7 @@ function extractResponseText(data: unknown): string {
 }
 
 /** Compact context: status + name-status + truncated patch (faster than raw 14k diffs). */
-function buildContext(status: string, nameStatus: string, diff: string, untracked: string): string {
+export function buildContext(status: string, nameStatus: string, diff: string, untracked: string): string {
   const parts: string[] = [];
 
   const st = status.trim();

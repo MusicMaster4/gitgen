@@ -22,7 +22,30 @@ interface CommitRequestBody {
   language?: string;
 }
 
+/**
+ * Same-origin guard: this route runs git against an arbitrary local path, so a
+ * malicious webpage must not be able to POST to it from the user's browser.
+ * Browsers always send `Origin` on cross-origin POSTs — reject when it doesn't
+ * match the request host. Requests without an Origin (curl, the CLI, same-app
+ * server calls) are allowed, so the UI and terminal workflows are unaffected.
+ */
+function isCrossOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  const host = req.headers.get("host");
+  if (!host) return true;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
 export async function POST(req: NextRequest) {
+  if (isCrossOrigin(req)) {
+    return NextResponse.json({ error: "Cross-origin requests are not allowed" }, { status: 403 });
+  }
+
   let body: CommitRequestBody;
   try {
     body = await req.json();

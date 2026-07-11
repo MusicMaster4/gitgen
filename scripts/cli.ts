@@ -13,8 +13,8 @@
  *   commit-and-push      cnp [pr]     add . -> (AI) commit -> push [-> PR]
  *   pr [base]            pr [base]    push branch -> AI title/body -> gh pr create
  *   branch <name>        b <name>     checkout -b -> add -> commit -> push -u
- *   merge  <src> [dst]   m <src> [d]  add -> commit -> checkout dst -> merge -> push
- *   save                 s            add -> commit -> checkout main
+ *   merge  <src> [dst]   m <src> [d]  add -> commit -> checkout dst|default -> merge -> push
+ *   save                 s            add -> commit -> checkout default branch
  *   checkout <branch>    ck <branch>  git checkout <branch>  (sw alias)
  *   remote <url>         r <url>      init -> remote add origin -> first push
  *   restore [file]       rs [file]    git restore . (or one file) — destructive
@@ -75,6 +75,7 @@ import {
   parseNpmLatestVersion,
 } from "../lib/update-check";
 import { sanitizeBranchName } from "../lib/branch-name";
+import { PUSH_ALIASES, isPrToken, isPushToken, parseCommitPrArgs } from "../lib/cli-args";
 import { runDoctorChecks } from "../lib/doctor";
 import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 import { c, header, row, sym, visibleLength } from "../lib/ui";
@@ -342,37 +343,6 @@ async function ensureGitRepo(): Promise<void> {
   if (!(await isInsideGitRepo())) {
     die("not inside a git repository — cd into a project or run git init");
   }
-}
-
-function isPrToken(t: string | undefined): boolean {
-  const v = (t || "").toLowerCase();
-  return v === "pr" || v === "pull" || v === "pull-request";
-}
-
-/**
- * After a commit/push command, detect trailing `pr [base]`.
- * Examples: cnp pr · cnp pr develop · commit push pr · commit pr main
- */
-function parseCommitPrArgs(
-  raw: string,
-  a1: string | undefined,
-  a2: string | undefined,
-  a3: string | undefined
-): { push: boolean; wantPr: boolean; prBase?: string } {
-  const pushByAlias = PUSH_ALIASES.has(raw);
-  // cnp [pr [base]]
-  if (pushByAlias) {
-    if (isPrToken(a1)) return { push: true, wantPr: true, prBase: a2 };
-    return { push: true, wantPr: false };
-  }
-  // commit push pr [base]  |  commit p pr [base]
-  if (isPushToken(a1)) {
-    if (isPrToken(a2)) return { push: true, wantPr: true, prBase: a3 };
-    return { push: true, wantPr: false };
-  }
-  // commit pr [base]  (implies push — you can't open a remote PR without push)
-  if (isPrToken(a1)) return { push: true, wantPr: true, prBase: a2 };
-  return { push: false, wantPr: false };
 }
 
 /** AI PR title/body, with sensible fallback if no key / API error. */
@@ -785,19 +755,11 @@ const SHORT_CMDS: Record<string, string> = {
   onboard: "setup",
 };
 
-// Commands whose very name means "…and push" (no separate push token needed).
-const PUSH_ALIASES = new Set(["cnp"]);
-
 const rawCmd = (positional[0] || "").toLowerCase();
 const cmd = SHORT_CMDS[rawCmd] || rawCmd;
 const arg1 = positional[1];
 const arg2 = positional[2];
 const arg3 = positional[3];
-
-function isPushToken(t: string | undefined): boolean {
-  const v = (t || "").toLowerCase();
-  return v === "push" || v === "p";
-}
 
 /** Where this CLI is installed (npm global prefix, local clone, etc.). */
 function installPaths(): {
@@ -1100,8 +1062,8 @@ function helpText(): string {
     ["commit-and-push [pr]", "cnp [pr]", "add . → commit → push [→ AI PR via gh]"],
     ["pr [base] [-y]", "pr [base]", "push → AI title/body → create PR (asks base)"],
     ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
-    ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|main → merge → push"],
-    ["save [-m]", "s [-m]", "commit current work, then checkout main"],
+    ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|default → merge → push"],
+    ["save [-m]", "s [-m]", "commit current work, then checkout default branch"],
     ["checkout <branch>", "ck <branch>", "git checkout <branch>"],
     ["remote <url> [-m]", "r <url> [-m]", "git init → remote add origin → first push"],
     ["restore [file] [-y]", "rs [file] [-y]", "discard changes (all, or one file)"],
@@ -1288,7 +1250,9 @@ async function main() {
 
     case "merge": {
       const source = resolveBranchName(arg1 || "", "source branch");
-      const target = arg2 ? resolveBranchName(arg2, "target branch") : "main";
+      const target = arg2
+        ? resolveBranchName(arg2, "target branch")
+        : await detectDefaultBase(cwd);
       banner(`merge ${source} → ${target}`);
       const message = await resolveMessage(messageFlag, `merge: integrate ${source} into ${target}`);
       await runSteps(async () => {
@@ -1304,7 +1268,8 @@ async function main() {
     }
 
     case "save": {
-      banner("save & return to main");
+      const target = await detectDefaultBase(cwd);
+      banner(`save & return to ${target}`);
       const message = await resolveMessage(messageFlag, "wip: saving progress");
       await runSteps(async () => {
         if (await hasChanges()) {
@@ -1313,7 +1278,7 @@ async function main() {
         } else {
           log(`  ${c.dim("nothing to commit — switching only")}`);
         }
-        await git(["checkout", "main"]);
+        await git(["checkout", target]);
       });
       return;
     }
