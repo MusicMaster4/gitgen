@@ -144,6 +144,7 @@ function openAiRequest(
 }
 
 function extractResponseText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
   const response = data as {
     output_text?: unknown;
     output?: Array<{ content?: Array<{ text?: unknown }> }>;
