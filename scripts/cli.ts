@@ -17,8 +17,13 @@
  *   save                 s            add -> commit -> checkout default branch
  *   checkout <branch>    ck <branch>  git checkout <branch>  (sw alias)
  *   remote <url>         r <url>      init -> remote add origin -> first push
- *   restore [file]       rs [file]    git restore . (or one file) — destructive
+ *   restore [file]       rs [file]    discard staged+worktree changes — destructive
  *   pull [--merge]       pl [--merge] git pull --rebase (default) or merge pull
+ *   status               st           compact status (branch, ahead/behind, files)
+ *   log [n]              lg [n]       recent commits (default 10)
+ *   undo                 undo         un-commit the last commit, keep changes staged
+ *   stash [pop|list]     stash        stash away / restore / list WIP (includes untracked)
+ *   amend [-m]           amend        add . -> amend last commit (keep or replace message)
  *   doctor               dr           check git, gh, API key, repo, upstream
  *   model [slug]         mo [slug]    show or switch the AI model
  *   setup / onboard      setup        OpenRouter onboard (hidden key + model + lang)
@@ -77,6 +82,7 @@ import {
 import { sanitizeBranchName } from "../lib/branch-name";
 import { PUSH_ALIASES, isPrToken, isPushToken, parseCommitPrArgs } from "../lib/cli-args";
 import { runDoctorChecks } from "../lib/doctor";
+import { describeStatusCode, parseAheadBehind, parsePorcelainStatus } from "../lib/status";
 import { APP_NAME, CLI_NAME, getPackageName, getVersion } from "../lib/version";
 import { c, header, row, sym, visibleLength } from "../lib/ui";
 
@@ -181,7 +187,12 @@ function gitLabel(args: string[]): string {
   if (cmd === "checkout" && args[1]) return `git checkout ${args[1]}`;
   if (cmd === "push" && args.includes("-u")) return "git push -u";
   if (cmd === "merge" && args[1]) return `git merge ${args[1]}`;
-  if (cmd === "restore" && args[1] && args[1] !== ".") return `git restore ${args[1]}`;
+  if (cmd === "restore") {
+    const target = args[args.length - 1];
+    return target && target !== "." ? `git restore ${target}` : "git restore";
+  }
+  if (cmd === "stash" && args[1]) return `git stash ${args[1]}`;
+  if (cmd === "reset" && args[1]) return `git reset ${args[1]}`;
   if (cmd === "remote" && args[1] === "add") return "git remote add";
   if (cmd === "branch" && args[1] === "-M") return "git branch -M";
   return `git ${cmd}`;
@@ -335,6 +346,18 @@ async function hasUpstream(): Promise<boolean> {
   return Boolean(up);
 }
 
+/** Push the current branch, setting upstream automatically on first push. */
+async function pushCurrent(): Promise<void> {
+  if (await hasUpstream()) {
+    await git(["push"], { progress: true });
+  } else {
+    const head = (await gitQuiet(["branch", "--show-current"])).trim();
+    if (!head) die("detached HEAD — checkout a branch before pushing");
+    log(`  ${c.dim("no upstream — first push sets")} ${c.dim(`origin/${head}`)}`);
+    await git(["push", "-u", "origin", head], { progress: true });
+  }
+}
+
 async function isInsideGitRepo(): Promise<boolean> {
   return (await gitQuiet(["rev-parse", "--is-inside-work-tree"])).trim() === "true";
 }
@@ -451,11 +474,7 @@ async function createPullRequest(baseHint?: string): Promise<void> {
   }
 
   // Ensure remote has our commits
-  if (await hasUpstream()) {
-    await git(["push"], { progress: true });
-  } else {
-    await git(["push", "-u", "origin", head], { progress: true });
-  }
+  await pushCurrent();
 
   // Same head already has an open PR → just update via push; don't create another.
   const existing = await withProgress("check existing PR", () => findOpenPrForHead(head));
@@ -735,7 +754,6 @@ const SHORT_CMDS: Record<string, string> = {
   c: "commit",
   cnp: "commit", // commit AND push in one word (implies push — see PUSH_ALIASES)
   pr: "pr",
-  pull: "pr",
   "pull-request": "pr",
   b: "branch",
   m: "merge",
@@ -746,6 +764,8 @@ const SHORT_CMDS: Record<string, string> = {
   r: "remote",
   rs: "restore",
   pl: "pull",
+  st: "status",
+  lg: "log",
   dr: "doctor",
   doctor: "doctor",
   mo: "model",
@@ -1056,31 +1076,59 @@ function helpText(): string {
   const { apiKey, model } = currentSettings();
   const { packageRoot: root } = installPaths();
   const d = c.dim;
-  const rows: Array<[string, string, string]> = [
-    ["start", "start", "open the web app with this folder"],
-    ["commit [push] [pr] [-m]", "c [p] [pr] [-m]", "add . → commit [→ push] [→ PR]"],
-    ["commit-and-push [pr]", "cnp [pr]", "add . → commit → push [→ AI PR via gh]"],
-    ["pr [base] [-y]", "pr [base]", "push → AI title/body → create PR (asks base)"],
-    ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
-    ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|default → merge → push"],
-    ["save [-m]", "s [-m]", "commit current work, then checkout default branch"],
-    ["checkout <branch>", "ck <branch>", "git checkout <branch>"],
-    ["remote <url> [-m]", "r <url> [-m]", "git init → remote add origin → first push"],
-    ["restore [file] [-y]", "rs [file] [-y]", "discard changes (all, or one file)"],
-    ["pull [--merge]", "pl [--merge]", "pull upstream (rebase default; --merge to merge)"],
-    ["doctor", "dr", "check git, gh, API key, repo, upstream"],
-    ["model [slug]", "mo [slug]", "show or switch the AI model"],
-    ["setup / onboard", "setup", "OpenRouter onboard (hidden key + model)"],
-    ["config [show|set|path|reset]", "config", "show/set config · reset = re-onboard"],
-    ["update", "u", "check npm / install latest"],
-    ["version", "v", "print version + install path"],
-    ["help", "h", "show this list (default if no command)"],
+  // null = section header row
+  const sections: Array<[string, Array<[string, string, string]>]> = [
+    [
+      "Workflows",
+      [
+        ["commit [push] [pr] [-m]", "c [p] [pr] [-m]", "add . → commit [→ push] [→ PR]"],
+        ["commit-and-push [pr]", "cnp [pr]", "add . → commit → push [→ AI PR via gh]"],
+        ["pr [base] [-y]", "pr [base]", "push → AI title/body → create PR (asks base)"],
+        ["branch <name> [-m]", "b <name> [-m]", "new branch → add → commit → push -u"],
+        ["merge <src> [dst] [-m]", "m <src> [dst]", "commit → checkout dst|default → merge → push"],
+        ["save [-m]", "s [-m]", "commit current work, then checkout default branch"],
+        ["checkout <branch>", "ck <branch>", "git checkout <branch>"],
+        ["remote <url> [-m]", "r <url> [-m]", "git init → remote add origin → first push"],
+        ["pull [--merge]", "pl [--merge]", "pull upstream (rebase default; --merge to merge)"],
+      ],
+    ],
+    [
+      "Inspect & fix",
+      [
+        ["status", "st", "branch, ahead/behind, changed files"],
+        ["log [n]", "lg [n]", "recent commits (default 10)"],
+        ["undo [-y]", "undo [-y]", "un-commit last commit, keep changes staged"],
+        ["amend [-m]", "amend [-m]", "add . → amend last commit (same or new message)"],
+        ["stash [pop|list] [-m]", "stash", "park WIP incl. untracked · restore · list"],
+        ["restore [file] [-y]", "rs [file] [-y]", "discard staged+worktree changes (all, or one file)"],
+        ["doctor", "dr", "check git, gh, API key, repo, upstream"],
+      ],
+    ],
+    [
+      "Setup & tooling",
+      [
+        ["start", "start", "open the web app with this folder"],
+        ["model [slug]", "mo [slug]", "show or switch the AI model"],
+        ["setup / onboard", "setup", "OpenRouter onboard (hidden key + model)"],
+        ["config [show|set|path|reset]", "config", "show/set config · reset = re-onboard"],
+        ["update", "u", "check npm / install latest"],
+        ["version", "v", "print version + install path"],
+        ["help", "h", "show this list (default if no command)"],
+      ],
+    ],
   ];
+  const rows = sections.flatMap(([, r]) => r);
   const longW = Math.max(...rows.map((r) => r[0].length));
   const shortW = Math.max(...rows.map((r) => r[1].length));
-  const body = rows
-    .map(([l, s, a]) => `  ${c.cyan(l.padEnd(longW))}  ${d(s.padEnd(shortW))}  ${a}`)
-    .join("\n");
+  const body = sections
+    .map(
+      ([title, secRows]) =>
+        `  ${c.bold(title)}\n` +
+        secRows
+          .map(([l, s, a]) => `  ${c.cyan(l.padEnd(longW))}  ${d(s.padEnd(shortW))}  ${a}`)
+          .join("\n")
+    )
+    .join("\n\n");
 
   return `
   ${c.bold(c.cyan("gitgen / git-gen / gg"))} ${d("— terminal git workflows")}
@@ -1188,7 +1236,7 @@ async function main() {
           await runSteps(async () => {
             await git(["add", "."]);
             await git(["commit", "-m", message]);
-            if (push) await git(["push"], { progress: true });
+            if (push) await pushCurrent();
           });
         }
       } else if (!wantPr) {
@@ -1262,7 +1310,7 @@ async function main() {
         }
         await git(["checkout", target]);
         await git(["merge", source]);
-        await git(["push"], { progress: true });
+        await pushCurrent();
       });
       return;
     }
@@ -1321,7 +1369,160 @@ async function main() {
         }
       }
       await runSteps(async () => {
-        await git(["restore", target]);
+        // --staged --worktree: also unstage, so "ALL uncommitted changes"
+        // really means all (plain `git restore` leaves staged edits behind).
+        await git(["restore", "--staged", "--worktree", target]);
+      });
+      return;
+    }
+
+    case "status": {
+      await ensureGitRepo();
+      banner("status");
+      const branch = (await gitQuiet(["branch", "--show-current"])).trim();
+      log(row("branch", branch ? c.bold(branch) : c.yellow("(detached HEAD)")));
+
+      const upstream = (await gitQuiet(["rev-parse", "--abbrev-ref", "@{upstream}"])).trim();
+      if (upstream) {
+        const counts = parseAheadBehind(
+          await gitQuiet(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"])
+        );
+        const sync =
+          !counts || (counts.ahead === 0 && counts.behind === 0)
+            ? c.green("in sync")
+            : [
+                counts.ahead ? c.yellow(`${counts.ahead} ahead`) : "",
+                counts.behind ? c.yellow(`${counts.behind} behind`) : "",
+              ]
+                .filter(Boolean)
+                .join(c.dim(" · "));
+        log(row("remote", `${upstream}  ${sync}`));
+      } else {
+        log(row("remote", c.dim("no upstream — first push sets it")));
+      }
+
+      const summary = parsePorcelainStatus(await gitQuiet(["status", "--porcelain", "-u"]));
+      if (summary.entries.length === 0) {
+        log(`  ${sym.ok} ${c.green("working tree clean")}`);
+        return;
+      }
+      const parts = [
+        summary.staged ? c.green(`${summary.staged} staged`) : "",
+        summary.unstaged ? c.yellow(`${summary.unstaged} unstaged`) : "",
+        summary.untracked ? c.cyan(`${summary.untracked} untracked`) : "",
+        summary.conflicted ? c.red(`${summary.conflicted} conflicted`) : "",
+      ].filter(Boolean);
+      log(row("changes", parts.join(c.dim(" · "))));
+      const MAX_FILES = 15;
+      for (const entry of summary.entries.slice(0, MAX_FILES)) {
+        log(`    ${c.dim(describeStatusCode(entry.code).padEnd(9))} ${entry.path}`);
+      }
+      if (summary.entries.length > MAX_FILES) {
+        log(`    ${c.dim(`… and ${summary.entries.length - MAX_FILES} more`)}`);
+      }
+      return;
+    }
+
+    case "log": {
+      await ensureGitRepo();
+      const n = Math.min(Math.max(parseInt(arg1 || "10", 10) || 10, 1), 100);
+      banner(`log · last ${n}`);
+      const out = (
+        await gitQuiet(["log", `-${n}`, "--no-decorate", "--pretty=format:%h\t%ar\t%an\t%s"])
+      ).trim();
+      if (!out) {
+        log(`  ${c.dim("no commits yet")}`);
+        return;
+      }
+      for (const line of out.split("\n")) {
+        const [hash, when, author, ...rest] = line.split("\t");
+        log(`  ${c.yellow(hash || "")} ${rest.join("\t")}`);
+        log(`    ${c.dim(`${when} · ${author}`)}`);
+      }
+      return;
+    }
+
+    case "undo": {
+      await ensureGitRepo();
+      banner("undo last commit (keep changes)");
+      const subject = (await gitQuiet(["log", "-1", "--pretty=%s"])).trim();
+      if (!subject) die("no commits to undo");
+      const hasParent = (await gitQuiet(["rev-parse", "--verify", "--quiet", "HEAD~1"])).trim();
+      if (!hasParent) die("this is the first commit — nothing to reset to");
+      const onRemote = (await gitQuiet(["branch", "-r", "--contains", "HEAD"])).trim();
+      if (onRemote) {
+        warn("last commit is already on the remote — undoing rewrites history (next push may need --force)");
+      }
+      log(row("commit", c.bold(subject)));
+      if (!yes) {
+        const ok = await confirm("Un-commit it? Your changes stay staged.");
+        if (!ok) {
+          log(`  ${c.dim("undo aborted")}`);
+          return;
+        }
+      }
+      await runSteps(async () => {
+        await git(["reset", "--soft", "HEAD~1"]);
+        log(`  ${c.dim("changes are back in the staging area — recommit with gg c")}`);
+      });
+      return;
+    }
+
+    case "stash": {
+      await ensureGitRepo();
+      const sub = (arg1 || "push").toLowerCase();
+      if (sub === "list") {
+        banner("stash list");
+        const out = (await gitQuiet(["stash", "list"])).trim();
+        if (!out) {
+          log(`  ${c.dim("no stashes")}`);
+          return;
+        }
+        for (const line of out.split("\n")) log(`  ${c.dim(line)}`);
+        return;
+      }
+      if (sub === "pop") {
+        banner("stash pop");
+        await runSteps(async () => {
+          await git(["stash", "pop"]);
+        });
+        return;
+      }
+      if (sub === "push" || sub === "save") {
+        banner("stash");
+        if (!(await hasChanges())) {
+          log(`  ${sym.ok} ${c.dim("nothing to stash — working tree clean")}`);
+          return;
+        }
+        await runSteps(async () => {
+          // -u: include untracked files so `gg stash` parks everything.
+          const args = ["stash", "push", "-u"];
+          if (messageFlag?.trim()) args.push("-m", messageFlag.trim());
+          await git(args);
+          log(`  ${c.dim("bring it back with")} ${c.cyan("gg stash pop")}`);
+        });
+        return;
+      }
+      die(`unknown stash subcommand "${sub}" — use (no arg) | pop | list`);
+    }
+
+    case "amend": {
+      await ensureGitRepo();
+      banner("amend last commit");
+      const subject = (await gitQuiet(["log", "-1", "--pretty=%s"])).trim();
+      if (!subject) die("no commit to amend");
+      const onRemote = (await gitQuiet(["branch", "-r", "--contains", "HEAD"])).trim();
+      if (onRemote) {
+        warn("last commit is already on the remote — amending rewrites history (next push may need --force)");
+      }
+      log(row("commit", c.bold(subject)));
+      await runSteps(async () => {
+        await git(["add", "."]);
+        if (messageFlag?.trim()) {
+          await git(["commit", "--amend", "-m", messageFlag.trim()]);
+        } else {
+          await git(["commit", "--amend", "--no-edit"]);
+        }
       });
       return;
     }

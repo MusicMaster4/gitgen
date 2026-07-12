@@ -134,8 +134,24 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 | `gg s` | `gg save` | Commit current work → checkout `main` |
 | `gg sw <branch>` | `gg switch <branch>` | Checkout a branch |
 | `gg r <url>` | `gg remote <url>` | `git init` → add `origin` → first push to `main` |
-| `gg rs` | `gg restore` | Discard **all** uncommitted changes (asks first) |
+| `gg pl` | `gg pull` | Pull upstream (`--rebase` default; `--merge` to merge) |
+| `gg rs` | `gg restore` | Discard **all** uncommitted changes, staged included (asks first) |
 | `gg rs <file>` | `gg restore <file>` | Discard changes to one file |
+
+### Inspect & fix
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `gg st` | `gg status` | Compact status: branch, ahead/behind, changed files |
+| `gg lg [n]` | `gg log [n]` | Recent commits (default 10, max 100) |
+| `gg undo` | `gg undo` | Un-commit the last commit, keep changes staged (asks first) |
+| `gg amend` | `gg amend [-m]` | Stage all → amend last commit (keep or replace message) |
+| `gg stash` | `gg stash` | Stash WIP including untracked files (`-m "label"` optional) |
+| `gg stash pop` | same | Restore the latest stash |
+| `gg stash list` | same | List stashes |
+| `gg dr` | `gg doctor` | Check git, gh, API key, repo, upstream |
+
+`undo` and `amend` warn when the last commit is already on the remote (rewriting history may need a force push). Pushes from `gg c p` / `gg cnp` / `gg m` set the upstream automatically on a branch's first push.
 
 ### Setup & tooling
 
@@ -158,8 +174,9 @@ All of these work with **`gg`**, **`gitgen`**, or **`git-gen`**.
 
 | Flag | Commands | Effect |
 |------|----------|--------|
-| `-m "msg"` / `--message "msg"` | Any command that commits | Use this message instead of AI / default |
-| `-y` / `--yes` | `restore` / `rs` / `pr` | Skip restore confirm; on PR, use default base without prompting |
+| `-m "msg"` / `--message "msg"` | Any command that commits; `amend`; `stash` | Use this message instead of AI / default (on `stash`: label) |
+| `-y` / `--yes` | `restore` / `rs` / `undo` / `pr` | Skip the confirm; on PR, use default base without prompting |
+| `--merge` / `--rebase` | `pull` / `pl` | Pull by merge instead of the default rebase |
 | `-v` / `-V` / `--version` | — | Same as `version` |
 | `-h` / `--help` | — | Same as `help` |
 
@@ -264,6 +281,22 @@ gg r https://github.com/you/new-repo.git
 # Undo uncommitted mess (confirm required unless -y)
 gg rs
 gg rs package-lock.json
+
+# See where you are and what changed
+gg st                          # branch, ahead/behind, changed files
+gg lg 5                        # last 5 commits
+
+# Fix the last commit
+gg undo                        # un-commit, keep changes staged
+gg amend                       # add forgotten files to the last commit
+gg amend -m "fix: better msg"  # also rewrite its message
+
+# Park work without committing
+gg stash -m "half-done login"
+gg sw main
+# …later…
+gg sw feature/login
+gg stash pop
 ```
 
 ### Live progress

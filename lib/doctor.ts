@@ -306,28 +306,29 @@ export async function runDoctorChecks(deps: DoctorDeps): Promise<DoctorSummary> 
   const file = loadConfigFn(configPath);
   const { apiKey } = resolveRuntimeSettings(file, env);
 
-  const checks: DoctorCheck[] = [
-    await checkNode(deps),
-    await checkGit(deps, run),
-    await checkRepo(deps, run),
-  ];
+  // Independent checks run in parallel — doctor answers in one round-trip
+  // instead of a serial chain (matters when git/gh/network are slow).
+  const [node, gitCheck, repo, branch, upstream, gh, or] = await Promise.all([
+    checkNode(deps),
+    checkGit(deps, run),
+    checkRepo(deps, run),
+    checkBranch(deps, run),
+    checkUpstream(deps, run),
+    checkGh(run, deps.cwd),
+    checkOpenRouter(apiKey, fetchFn),
+  ]);
 
-  const branch = await checkBranch(deps, run);
+  const checks: DoctorCheck[] = [node, gitCheck, repo];
   if (branch) checks.push(branch);
-
-  const upstream = await checkUpstream(deps, run);
   if (upstream) checks.push(upstream);
-
   checks.push(checkApiKey(file, env));
   checks.push(checkConfigPath(configPath));
-
-  const gh = await checkGh(run, deps.cwd);
   checks.push(gh);
 
+  // gh auth only makes sense when gh exists — the one dependency kept serial.
   const ghAuth = await checkGhAuth(run, deps.cwd, gh.status === "ok");
   if (ghAuth) checks.push(ghAuth);
 
-  const or = await checkOpenRouter(apiKey, fetchFn);
   if (or) checks.push(or);
 
   return summarizeDoctorChecks(checks);
