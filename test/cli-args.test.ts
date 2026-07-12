@@ -3,16 +3,17 @@ import assert from "node:assert/strict";
 import { isPrToken, isPushToken, parseCommitPrArgs } from "../lib/cli-args";
 
 describe("isPrToken", () => {
-  it("accepts pr, pull, pull-request in any case", () => {
+  it("accepts pr and pull-request in any case", () => {
     assert.equal(isPrToken("pr"), true);
     assert.equal(isPrToken("PR"), true);
-    assert.equal(isPrToken("pull"), true);
     assert.equal(isPrToken("pull-request"), true);
   });
 
   it("rejects other tokens and undefined", () => {
     assert.equal(isPrToken("push"), false);
     assert.equal(isPrToken("main"), false);
+    // "pull" is the pull command, not a PR token
+    assert.equal(isPrToken("pull"), false);
     assert.equal(isPrToken(undefined), false);
     assert.equal(isPrToken(""), false);
   });

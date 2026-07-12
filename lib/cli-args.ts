@@ -9,7 +9,8 @@ export const PUSH_ALIASES = new Set(["cnp"]);
 
 export function isPrToken(t: string | undefined): boolean {
   const v = (t || "").toLowerCase();
-  return v === "pr" || v === "pull" || v === "pull-request";
+  // "pull" is NOT a PR token — `gg pull` means git pull.
+  return v === "pr" || v === "pull-request";
 }
 
 export function isPushToken(t: string | undefined): boolean {
